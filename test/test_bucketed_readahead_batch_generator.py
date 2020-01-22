@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import unittest
 
-from infinibatch.bucketed_readahead_batch_generator import BucketedReadaheadBatchGenerator
+from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadaheadBatchGenerator
 
 # @TODO: Maybe move this into a test utils class? Or just use a real reader.
 class FakeIterableDataset: # just to have something to work with

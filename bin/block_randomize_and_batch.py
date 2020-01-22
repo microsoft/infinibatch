@@ -8,7 +8,7 @@ import os, sys, inspect
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))))  # find our imports
 
 from infinibatch.common.chunked_dataset import ChunkedDataset
-from infinibatch.bucketed_readahead_batch_generator import BucketedReadaheadBatchGenerator
+from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadaheadBatchGenerator
 
 sets = sys.argv[1:]
 
