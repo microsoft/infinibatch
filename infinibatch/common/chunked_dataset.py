@@ -30,7 +30,7 @@ def buffered_shuffle_generator(data, buffer_size):
     
     Arguments:
     data -- iterable containing data
-    buffer_size -- size of the buffer used for shuffling
+    buffer_size -- size of the buffer in number of samples / data items used for shuffling
     """
     if buffer_size <= 0:
         raise ValueError
@@ -59,7 +59,7 @@ class ChunkedDataset:
         Arguments:
         path -- path of directory containing dataset, i.e., a collection of .gz-files containing compressed text
         shuffle -- if true, the data is shuffled
-        buffer_size -- size of the buffer used for shuffling data
+        buffer_size -- size of the buffer in number of samples / data items used for shuffling
         transform -- transform to be applied to each data item
         """
         self.chunk_file_paths = []
