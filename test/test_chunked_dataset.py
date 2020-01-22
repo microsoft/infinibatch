@@ -46,8 +46,8 @@ class TestChunkedDataset(unittest.TestCase):
         for chunk_id, chunk in enumerate(self.test_data):
             file_name = os.path.join(self.data_dir, 'chunk_' + str(chunk_id).zfill(10) + '.gz')
             self.chunk_file_paths.append(file_name)
-            file_content = '\n'.join(chunk).encode('utf-8')
-            with gzip.open(file_name, 'w') as f:
+            file_content = '\n'.join(chunk)
+            with gzip.open(file_name, 'wt', encoding='utf-8') as f:
                 f.write(file_content)
 
 
@@ -66,7 +66,7 @@ class TestChunkedDataset(unittest.TestCase):
         items = []
         for item in chunked_data_generator(self.chunk_file_paths, shuffle_chunks=True):
             items.append(item)
-        self.assertSetEqual(set(items), set(self.flattened_test_data))
+        self.assertSetEqual(set(items), set(self.flattened_test_data)) 
 
 
     def test_buffered_shuffle_generator(self):

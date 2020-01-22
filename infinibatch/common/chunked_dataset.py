@@ -17,8 +17,8 @@ def chunked_data_generator(chunk_file_paths, shuffle_chunks):
         random.shuffle(chunk_file_paths)
         
     for chunk_file_path in chunk_file_paths:
-        with gzip.open(chunk_file_path, 'r') as f:
-            data = f.read().decode('utf-8').splitlines()
+        with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
+            data = f.read().splitlines()
 
         for item in data:
             yield item
