@@ -2,14 +2,31 @@ from typing import Union, List, Iterator, Any, Callable
 from random import Random
 from itertools import islice
 
-# based on Marian NMT's BatchGenerator
 # Note: This could be implemented more elegantly as a generator function.
 # However, that may no longer be true with checkpointing, so let's keep it as a class for now.
 class BucketedReadaheadBatchGenerator:
+    """
+    Generator to read items from a Dataset and group items of similar lewgth into batches.
+
+    The algorithm reads a head a certain number of lines (e.g. 10 million), sorts them by
+    length, and them groups them into batches from start to end. The sort is stable, such
+    that prior randomization is not undone (except for the length grouping). The batch size
+    is dynamic, and determined by a user-provided callback.
+
+    This is based on Marian NMT's BatchGenerator.
+
+    Arguments:
+    dataset -- The data set that is read from. Typically this is an infinite source.
+    read_ahead -- Number of items to fetch ahead for grouping purposes.
+    key -- User-provided callback to define how data is sorted for purpose of batching.
+    batch_size_fn -- User-provided callback to determine batch size for a given first batch item.
+    shuffle -- Pass False to not randomize the batches. (default: True)
+    seed -- Random seed for batch shuffling.
+    """
     # parameters
-    _key: Callable[[Any], Any]            # callback to define how data is sorted for purpose of batching
-    _batch_size_fn: Callable[[Any], Any]  # callback to determine batch size for a given first item
-    _read_ahead: int                     # how many items should be read ahead?
+    _key: Callable[[Any], Any]
+    _batch_size_fn: Callable[[Any], Any]
+    _read_ahead: int
 
     # state
     _data_iter: Iterator[Any]   # iterator into _dataset
