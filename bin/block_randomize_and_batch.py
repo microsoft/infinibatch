@@ -14,7 +14,7 @@ sets = sys.argv[1:]
 
 ds = ChunkedDataset(sets, shuffle=True, buffer_size=10000000, seed=1)
 batch_labels = 500
-bg = BucketedReadaheadBatchGenerator(ds, read_ahead=100, key=lambda line: len(line), batch_size_fn=lambda line: batch_labels // len(line), seed=1)
+bg = BucketedReadaheadBatchGenerator(ds, read_ahead=100, key=lambda line: len(line), batch_size_fn=lambda line: batch_labels // (1+len(line)), seed=1)
 for batch in bg:
     print(f"\n---- size {len(batch)} ---\n")
     print("\n".join(batch))

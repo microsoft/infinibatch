@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import sys, inspect
 
 from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadaheadBatchGenerator
 
@@ -20,17 +21,25 @@ class FakeIterableDataset: # just to have something to work with
 
     def __next__(self):
         try:
-            return next(self._f)
+            return next(self._f).rstrip()
         except StopIteration:
-            self._rebuffer()      # this simple class just repeats the input infinitely
-            return next(self._f)  # should not fail
+            self._rebuffer()               # this simple class just repeats the input infinitely
+            return next(self._f).rstrip()  # should not fail
 
     def __iter__(self):
         return self
 
-# test code --@TODO: put this into a proper command-line wrapper or a test project
+# e.g.
+# python3.6 -m unittest discover -s ./test/ -p test_bucketed_readahead_batch_generator.py
+path = os.path.abspath(inspect.getfile(inspect.currentframe())) + "/../../infinibatch/common/chunked_dataset.py"  # (use one of our own source files as a source)
+print(path)
 ds = FakeIterableDataset("/home/fseide/factored-segmenter/src/FactoredSegmenter.cs")
-batch_labels = 10000
-bg = BucketedReadaheadBatchGenerator(ds, read_ahead=100, key=lambda line: len(line), batch_size_fn=lambda line: batch_labels // len(line))
+batch_labels = 500
+bg = BucketedReadaheadBatchGenerator(ds, read_ahead=100, key=lambda line: len(line), batch_size_fn=lambda line: batch_labels // (1+len(line)))
+i = 0
 for batch in bg:
-    print(batch)
+    i = i + 1
+    if (i > 20):
+        break
+    print(f"\n---- size {len(batch)} ---\n")
+    print("\n".join(batch))
