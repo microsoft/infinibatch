@@ -37,7 +37,12 @@ def buffered_shuffle_generator(data, buffer_size):
 
     buffer = [None for _ in range(buffer_size)]
 
-    # run Fisher-Yates shuffling algorithm with a buffer
+    # shuffle data with a buffer:
+    # this is similar to what the Fisher-Yates shuffle does,
+    # but modified to run with a constant-size buffer
+    # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+    # this was inspired by an algorithm implemented in Kaldi
+    # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
     for item in data:
         index = random.randrange(0, len(buffer))
         if buffer[index] is not None:
