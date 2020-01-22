@@ -17,7 +17,7 @@ class BucketedReadaheadBatchGenerator:
     _dataset_exhausted: bool    # set to True once we hit StopIteration on dataset
     _batch_iter: Iterator[Any]  # iterator into current set of batches
 
-    def __init__(self, dataset, read_ahead: int, key: Callable[[Any], Any], batch_size_fn: Callable[[Any], Any], shuffle: bool=True, seed: int=1):
+    def __init__(self, dataset, read_ahead: int, key: Callable[[Any], Any], batch_size_fn: Callable[[Any], Any], shuffle: bool=True, seed: int=None):
         # keep arguments
         self._key = key
         self._batch_size_fn = batch_size_fn
@@ -25,7 +25,8 @@ class BucketedReadaheadBatchGenerator:
         # initialize state
         if shuffle:
             self._random = Random()
-            self._random.seed(seed)
+            if seed is not None:
+                self._random.seed(seed)
         self._data_iter = iter(dataset)
         self._dataset_exhausted = False
         self._rebuffer()  # get first set
