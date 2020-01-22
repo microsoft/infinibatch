@@ -19,13 +19,13 @@ class BucketedReadaheadBatchIterator:
     dataset -- The data set that is read from. Typically this is an infinite source.
     read_ahead -- Number of items to fetch ahead for grouping purposes.
     key -- User-provided callback to define how data is sorted for purpose of batching.
-    batch_size_fn -- User-provided callback to determine batch size for a given first batch item.
+    batch_size -- Batch size in number of items. Either an integer or a callback to determine batch size for a given first batch item.
     shuffle -- Pass False to not randomize the batches. (default: True)
     seed -- Random seed for batch shuffling.
     """
     # parameters
     _key: Callable[[Any], Any]
-    _batch_size_fn: Callable[[Any], Any]
+    _batch_size: Union[int,Callable[[Any], int]]
     _read_ahead: int
 
     # state
@@ -34,10 +34,10 @@ class BucketedReadaheadBatchIterator:
     _dataset_exhausted: bool    # set to True once we hit StopIteration on dataset
     _batch_iter: Iterator[Any]  # iterator into current set of batches
 
-    def __init__(self, dataset, read_ahead: int, key: Callable[[Any], Any], batch_size_fn: Callable[[Any], Any], shuffle: bool=True, seed: int=None):
+    def __init__(self, dataset, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: int=None):
         # keep arguments
         self._key = key
-        self._batch_size_fn = batch_size_fn
+        self._batch_size = batch_size
         self._read_ahead = read_ahead
         # initialize state
         if shuffle:
@@ -51,7 +51,7 @@ class BucketedReadaheadBatchIterator:
     def _rebuffer(self):  # this is called whenever we need to create the next set of batches
         if self._dataset_exhausted: # dataset has flagged end
             raise StopIteration
-        # prefetch the readahead buffer  --@TODO: This is really a Take(_read_ahead)
+        # prefetch the readahead buffer
         lines = list(islice(self._data_iter, self._read_ahead))
         self._dataset_exhausted = (len(lines) < self._read_ahead)
         # sort by length, longest first
@@ -62,7 +62,10 @@ class BucketedReadaheadBatchIterator:
         batches = []
         for line in lines:
             if not cur_batch:
-                batch_size = self._batch_size_fn(line)
+                if isinstance(self._batch_size, int):  # batch_size can be either a constant int or a callback
+                    batch_size = self._batch_size
+                else:
+                    batch_size = self._batch_size(line)
                 cur_batch = []
             cur_batch.append(line)
             if len(cur_batch) >= batch_size:
