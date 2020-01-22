@@ -33,7 +33,7 @@ def buffered_shuffle_generator(data, buffer_size):
     buffer_size -- size of the buffer in number of samples / data items used for shuffling
     """
     if buffer_size <= 0:
-        raise ValueError
+        raise ValueError('The buffer size most be non-negative.')
 
     buffer = [None for _ in range(buffer_size)]
 
@@ -50,8 +50,8 @@ def buffered_shuffle_generator(data, buffer_size):
             yield item
 
 
-@TODO: Support non-zipped files.
-@TODO: Change default buffer size to a more reasonable value.
+#@TODO: Support non-zipped files.
+#@TODO: Change default buffer size to a more reasonable value.
 class ChunkedDataset:
     def __init__(self, path, shuffle=True, buffer_size=1024, transform=None):
         """
