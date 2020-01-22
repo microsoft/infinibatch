@@ -55,8 +55,10 @@ def buffered_shuffle_generator(data, buffer_size):
             yield item
 
 
-#@TODO: Support non-zipped files.
-#@TODO: Change default buffer size to a more reasonable value.
+# @TODO: Support non-zipped files.
+# @TODO: Change default buffer size to a more reasonable value.
+# @TODO: Support index files?
+# @TODO: Make sure file order is always the same, independent of OS.
 class ChunkedDataset:
     def __init__(self, path, shuffle=True, buffer_size=1024, transform=None):
         """
