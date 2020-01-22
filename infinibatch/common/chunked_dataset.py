@@ -51,22 +51,6 @@ def buffered_shuffle_generator(data, buffer_size):
             yield item
 
 
-def transform_generator(data, transform=None):
-    """
-    Transform and yield given data.
-    
-    Arguments:
-    data -- list or generator containing data
-    transform -- transform to be applied to each data item
-    """
-    if transform:
-        for item in data:
-            yield transform(item)
-    else:
-        for item in data:
-            yield item
-
-
 class ChunkedDataset:
     def __init__(self, path, shuffle=True, buffer_size=1024, transform=None):
         """
@@ -92,4 +76,6 @@ class ChunkedDataset:
         gen = chunked_data_generator(self.chunk_file_paths, self.shuffle)
         if self.shuffle:
             gen = buffered_shuffle_generator(gen, self.buffer_size)
-        return transform_generator(gen, transform=self.transform)
+        if self.transform is not None:
+            gen = (self.transform(item) for item in gen)
+        return gen

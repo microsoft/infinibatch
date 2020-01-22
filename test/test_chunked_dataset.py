@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 import context  # allows us to directly import from our package without installing it first
-from infinibatch.common.chunked_dataset import ChunkedDataset, chunked_data_generator, buffered_shuffle_generator, transform_generator
+from infinibatch.common.chunked_dataset import ChunkedDataset, chunked_data_generator, buffered_shuffle_generator
 
 
 class TestChunkedDataset(unittest.TestCase):
@@ -85,22 +85,6 @@ class TestChunkedDataset(unittest.TestCase):
 
     def test_buffered_shuffle_generator_zero_buffer(self):
         self.assertRaises(ValueError, buffered_shuffle_generator([1], 0).__next__)
-
-
-    def test_transform_generator(self):
-        transform = lambda s: s + '!'
-        modified_test_data = [transform(s) for s in self.flattened_test_data]
-        items = []
-        for item in transform_generator(self.flattened_test_data, transform=transform):
-            items.append(item)
-        self.assertListEqual(items, modified_test_data)
-
-    
-    def test_transform_generator_no_transform(self):
-        items = []
-        for item in transform_generator(self.flattened_test_data):
-            items.append(item)
-        self.assertListEqual(items, self.flattened_test_data)
 
 
     def test_no_shuffle(self):
