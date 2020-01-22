@@ -29,7 +29,7 @@ def buffered_shuffle_generator(data, buffer_size):
     Shuffle and yield given data using a buffer.
     
     Arguments:
-    data -- list or generator containing data
+    data -- iterable containing data
     buffer_size -- size of the buffer used for shuffling
     """
     if buffer_size <= 0:
