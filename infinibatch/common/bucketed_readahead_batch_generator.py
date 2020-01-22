@@ -55,7 +55,7 @@ class BucketedReadaheadBatchGenerator:
         lines = list(islice(self._data_iter, self._read_ahead))
         self._dataset_exhausted = (len(lines) < self._read_ahead)
         # sort by length, longest first
-        lines.sort(key=lambda line: len(line), reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
+        lines.sort(key=self._key, reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
         # group into batches
         cur_batch = None
         batch_size: int
