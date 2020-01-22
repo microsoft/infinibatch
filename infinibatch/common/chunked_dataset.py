@@ -51,6 +51,7 @@ def buffered_shuffle_generator(data, buffer_size):
             yield item
 
 
+@ TODO: Support non-zipped files.
 class ChunkedDataset:
     def __init__(self, path, shuffle=True, buffer_size=1024, transform=None):
         """
