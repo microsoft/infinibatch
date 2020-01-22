@@ -4,9 +4,9 @@ from itertools import islice
 
 # Note: This could be implemented more elegantly as a generator function.
 # However, that may no longer be true with checkpointing, so let's keep it as a class for now.
-class BucketedReadaheadBatchGenerator:
+class BucketedReadaheadBatchIterator:
     """
-    Generator to read items from a Dataset and group items of similar lewgth into batches.
+    Iterates over items from a Dataset and group items of similar length into batches.
 
     The algorithm reads a head a certain number of lines (e.g. 10 million), sorts them by
     length, and them groups them into batches from start to end. The sort is stable, such
@@ -59,11 +59,11 @@ class BucketedReadaheadBatchGenerator:
         # group into batches
         cur_batch = None
         batch_size: int
-        batches = list()
+        batches = []
         for line in lines:
             if not cur_batch:
                 batch_size = self._batch_size_fn(line)
-                cur_batch = list()
+                cur_batch = []
             cur_batch.append(line)
             if len(cur_batch) >= batch_size:
                 batches.append(cur_batch)
