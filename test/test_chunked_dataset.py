@@ -4,7 +4,6 @@ import shutil
 import tempfile
 import unittest
 
-import context  # allows us to directly import from our package without installing it first
 from infinibatch.common.chunked_dataset import ChunkedDataset, chunked_data_generator, buffered_shuffle_generator
 
 
