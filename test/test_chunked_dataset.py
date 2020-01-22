@@ -66,7 +66,29 @@ class TestChunkedDataset(unittest.TestCase):
         items = []
         for item in chunked_data_generator(self.chunk_file_paths, shuffle_chunks=True):
             items.append(item)
-        self.assertSetEqual(set(items), set(self.flattened_test_data)) 
+        self.assertSetEqual(set(items), set(self.flattened_test_data))
+
+    
+    def test_chunked_data_generator_different_line_endings(self):
+        # write data in binary mode with LF line endings
+        lf_dir = tempfile.mkdtemp()
+        lf_file = os.path.join(lf_dir, 'test.gz')
+        with gzip.open(lf_file, 'w') as f:
+            f.write('\n'.join(self.flattened_test_data).encode('utf-8'))
+
+        # write data in binary mode with CRLF line endings
+        crlf_dir = tempfile.mkdtemp()
+        crlf_file = os.path.join(crlf_dir, 'test.gz')
+        with gzip.open(crlf_file, 'w') as f:
+            f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
+
+        lf_data = list(chunked_data_generator([lf_file], shuffle_chunks=False))
+        crlf_dat = list(chunked_data_generator([crlf_file], shuffle_chunks=False))
+
+        self.assertListEqual(lf_data, crlf_dat)
+
+        shutil.rmtree(lf_dir)
+        shutil.rmtree(crlf_dir)
 
 
     def test_buffered_shuffle_generator(self):
