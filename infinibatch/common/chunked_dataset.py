@@ -45,7 +45,6 @@ def buffered_shuffle_generator(data, buffer_size):
         buffer[index] = item
 
     # flush buffer
-    random.shuffle(buffer)
     for item in buffer:
         if item is not None:
             yield item
