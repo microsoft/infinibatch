@@ -17,8 +17,8 @@ class ChunkedDataset(IterableDataset):
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is None:  # single-process data loading
-            self.dataset.instance_rank = self.rank
+            self.dataset._instance_rank = self.rank
         else:
             assert worker_info.num_workers == self.num_workers_per_rank
-            self.dataset.instance_rank = self.rank * self.num_workers_per_rank + worker_info.id
+            self.dataset._instance_rank = self.rank * self.num_workers_per_rank + worker_info.id
         return self.dataset.__iter__()

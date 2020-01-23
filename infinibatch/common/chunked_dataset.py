@@ -14,13 +14,13 @@ class InfinitePermutationIterator:
         iterable -- input iterable
         seed -- random seed used for shuffling
         """
-        self.items = list(iterable)
-        self.random = Random(seed)
+        self._items = list(iterable)
+        self._random = Random(seed)
 
     def __iter__(self):
         while True:
-            self.random.shuffle(self.items)
-            for item in self.items:
+            self._random.shuffle(self._items)
+            for item in self._items:
                 yield item
 
 
@@ -32,10 +32,10 @@ class ChunkedDataIterator:
         Arguments:
         chunk_file_paths -- iterable of paths to chunk files
         """
-        self.chunk_file_paths = chunk_file_paths
+        self._chunk_file_paths = chunk_file_paths
     
     def __iter__(self):
-        for chunk_file_path in self.chunk_file_paths:
+        for chunk_file_path in self._chunk_file_paths:
             with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
                 data = f.read().splitlines()
             for item in data:
@@ -52,9 +52,9 @@ class BufferedShuffleIterator:
         buffer_size -- size of the buffer in number of items used for shuffling
         seed -- random seed used for shuffling
         """
-        self.iterable = iterable
-        self.buffer = [None for _ in range(buffer_size)]
-        self.random = Random(seed)
+        self._iterable = iterable
+        self._buffer = [None for _ in range(buffer_size)]
+        self._random = Random(seed)
 
     def __iter__(self):
         # shuffle data with a buffer:
@@ -63,14 +63,14 @@ class BufferedShuffleIterator:
         # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
         # this was inspired by an algorithm implemented in Kaldi
         # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
-        for item in self.iterable:
-            index = self.random.randrange(0, len(self.buffer))
-            if self.buffer[index] is not None:
-                yield self.buffer[index]
-            self.buffer[index] = item
+        for item in self._iterable:
+            index = self._random.randrange(0, len(self._buffer))
+            if self._buffer[index] is not None:
+                yield self._buffer[index]
+            self._buffer[index] = item
 
         # flush buffer
-        for item in self.buffer:
+        for item in self._buffer:
             if item is not None:
                 yield item
 
@@ -94,34 +94,34 @@ class ChunkedDataset:
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
-        self.chunk_file_paths = []
+        self._chunk_file_paths = []
         for path in paths:
             for subpath in os.scandir(path):
                 if subpath.is_file() and subpath.name.endswith('.gz'):
-                    self.chunk_file_paths.append(os.path.join(path, subpath.name))
-        self.chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
-        self.shuffle = shuffle
-        self.buffer_size = buffer_size
-        self.transform = transform
-        self.seed = seed
-        self.num_instances = num_instances
-        self.instance_rank = instance_rank
+                    self._chunk_file_paths.append(os.path.join(path, subpath.name))
+        self._chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
+        self._shuffle = shuffle
+        self._buffer_size = buffer_size
+        self._transform = transform
+        self._seed = seed
+        self._num_instances = num_instances
+        self._instance_rank = instance_rank
 
     def __iter__(self):
-        if not self.shuffle:
-            chunks = itertools.cycle(self.chunk_file_paths)
+        if not self._shuffle:
+            chunks = itertools.cycle(self._chunk_file_paths)
         else:
-            chunks = InfinitePermutationIterator(self.chunk_file_paths, self.seed)
-        if self.num_instances > 1:
-            chunks = itertools.islice(chunks, self.instance_rank, None, self.num_instances)
+            chunks = InfinitePermutationIterator(self._chunk_file_paths, self._seed)
+        if self._num_instances > 1:
+            chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
         
         samples = ChunkedDataIterator(chunks)
-        if self.shuffle:
+        if self._shuffle:
             # use different seed for BufferedShuffleGenerator
-            buffered_shuffle_iterator_seed = self.seed
+            buffered_shuffle_iterator_seed = self._seed
             if buffered_shuffle_iterator_seed:
                 buffered_shuffle_iterator_seed += 1
-            samples = BufferedShuffleIterator(samples, self.buffer_size, buffered_shuffle_iterator_seed)
-        if self.transform is not None:
-            samples = (self.transform(item) for item in samples)
+            samples = BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
+        if self._transform is not None:
+            samples = (self._transform(item) for item in samples)
         return samples.__iter__()
