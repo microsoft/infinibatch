@@ -48,8 +48,8 @@ class BufferedShuffleIterator:
         Shuffles given iterable using a buffer.
         
         Arguments:
-        iterable -- input iterable
-        buffer_size -- size of the buffer in number of samples used for shuffling
+        iterable -- input iterable over items to shuffle
+        buffer_size -- size of the buffer in number of items used for shuffling
         seed -- random seed used for shuffling
         """
         self.iterable = iterable
