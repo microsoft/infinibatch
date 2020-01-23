@@ -21,4 +21,4 @@ class ChunkedDataset(IterableDataset):
         else:
             assert worker_info.num_workers == self.num_workers_per_rank
             self.dataset._instance_rank = self.rank * self.num_workers_per_rank + worker_info.id
-        return self.dataset.__iter__()
+        return iter(self.dataset)

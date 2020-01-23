@@ -121,9 +121,9 @@ class ChunkedDataset:
         if self._shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = self._seed
-            if buffered_shuffle_iterator_seed:
+            if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
             samples = BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
         if self._transform is not None:
             samples = (self._transform(item) for item in samples)
-        return samples.__iter__()
+        return iter(samples)
