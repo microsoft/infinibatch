@@ -52,14 +52,14 @@ class ChunkedDataReader:
 
 
 class BufferedShuffleIterator:
-    def __init__(self, iterable, buffer_size, random=Random()):
+    def __init__(self, iterable: Iterable, buffer_size: int, random: Random):
         """
         Shuffles given iterable using a buffer.
         
         Arguments:
         iterable -- input iterable
         buffer_size -- size of the buffer in number of samples used for shuffling
-        random -- random number generator used for shuffling
+        random -- RNG used for shuffling
         """
         self.iterable = iterable
         self.buffer = [None for _ in range(buffer_size)]

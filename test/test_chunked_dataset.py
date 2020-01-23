@@ -122,12 +122,12 @@ class TestChunkedDataReader(TestBase):
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, random.Random(42)))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
 
     def test_shuffle_buffer_size_one(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, random.Random(42)))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
 
