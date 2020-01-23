@@ -8,26 +8,26 @@ import sys, inspect
 from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadaheadBatchIterator
 
 # @TODO: Maybe move this into a test utils class? Or just use a real reader.
-class FakeIterableDataset: # just to have something to work with
-    _path: str            # pathname of the file
-    #_f: Any #: io.TextIOWrapper  # the file we are reading from
+# class FakeIterableDataset: # just to have something to work with
+#     _path: str            # pathname of the file
+#     #_f: Any #: io.TextIOWrapper  # the file we are reading from
 
-    def __init__(self, path : str):
-        self._path = path
-        self._f = open(self._path, mode='rt', encoding="utf-8")
+#     def __init__(self, path : str):
+#         self._path = path
+#         self._f = open(self._path, mode='rt', encoding="utf-8")
 
-    def _rebuffer(self):
-        self._f.seek(0)  #  --@BUGBUG: If it is not seekable (e.g. stdin), this must raise StopIteration
+#     def _rebuffer(self):
+#         self._f.seek(0)  #  --@BUGBUG: If it is not seekable (e.g. stdin), this must raise StopIteration
 
-    def __next__(self):
-        try:
-            return next(self._f).rstrip()
-        except StopIteration:
-            self._rebuffer()               # this simple class just repeats the input infinitely
-            return next(self._f).rstrip()  # should not fail
+#     def __next__(self):
+#         try:
+#             return next(self._f).rstrip()
+#         except StopIteration:
+#             self._rebuffer()               # this simple class just repeats the input infinitely
+#             return next(self._f).rstrip()  # should not fail
 
-    def __iter__(self):
-        return self
+#     def __iter__(self):
+#         return self
 
 # e.g.
 # python3.6 -m unittest discover -s ./test/ -p test_bucketed_readahead_batch_generator.py
