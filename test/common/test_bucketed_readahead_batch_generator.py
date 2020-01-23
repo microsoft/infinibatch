@@ -31,15 +31,15 @@ class FakeIterableDataset: # just to have something to work with
 
 # e.g.
 # python3.6 -m unittest discover -s ./test/ -p test_bucketed_readahead_batch_generator.py
-path = os.path.abspath(inspect.getfile(inspect.currentframe())) + "/../../infinibatch/common/chunked_dataset.py"  # (use one of our own source files as a source)
-print(path)
-ds = FakeIterableDataset("/home/fseide/factored-segmenter/src/FactoredSegmenter.cs")
-batch_labels = 500
-bg = BucketedReadaheadBatchIterator(ds, read_ahead=100, key=lambda line: len(line), batch_size=lambda line: batch_labels // (1+len(line)))
-i = 0
-for batch in bg:
-    i = i + 1
-    if (i > 20):
-        break
-    print(f"\n---- size {len(batch)} ---\n")
-    print("\n".join(batch))
+# path = os.path.abspath(inspect.getfile(inspect.currentframe())) + "/../../infinibatch/common/chunked_dataset.py"  # (use one of our own source files as a source)
+# print(path)
+# ds = FakeIterableDataset("/home/fseide/factored-segmenter/src/FactoredSegmenter.cs")
+# batch_labels = 500
+# bg = BucketedReadaheadBatchIterator(ds, read_ahead=100, key=lambda line: len(line), batch_size=lambda line: batch_labels // (1+len(line)))
+# i = 0
+# for batch in bg:
+#     i = i + 1
+#     if (i > 20):
+#         break
+#     print(f"\n---- size {len(batch)} ---\n")
+#     print("\n".join(batch))
