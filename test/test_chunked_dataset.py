@@ -8,7 +8,7 @@ import unittest
 from infinibatch.common.chunked_dataset import ChunkedDataset, ChunkedDataReader, BufferedShuffleIterator
 
 
-class TestChunkedDataset(unittest.TestCase):
+class TestBase(unittest.TestCase):
     def setUp(self):
         self.test_data = \
         [
@@ -55,17 +55,19 @@ class TestChunkedDataset(unittest.TestCase):
         shutil.rmtree(self.data_dir)
 
 
-    def test_chunked_data_generator_no_shuffle(self):
+class TestChunkedDataReader(TestBase):    
+    def test_no_shuffle(self):
         items = list(ChunkedDataReader(self.chunk_file_paths, random=None))
         self.assertListEqual(items, self.flattened_test_data)
 
 
-    def test_chunked_data_generator_shuffle(self):
+    def test_shuffle(self):
         items = list(ChunkedDataReader(self.chunk_file_paths, random=random.Random()))
+        self.assertEqual(len(items), len(self.flattened_test_data))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
 
     
-    def test_chunked_data_generator_different_line_endings(self):
+    def test_different_line_endings(self):
         # write data in binary mode with LF line endings
         lf_dir = tempfile.mkdtemp()
         lf_file = os.path.join(lf_dir, 'test.gz')
@@ -87,16 +89,20 @@ class TestChunkedDataset(unittest.TestCase):
         shutil.rmtree(crlf_dir)
 
 
-    def test_buffered_shuffle_generator(self):
+class TestBufferedShuffleIterator(TestBase):
+    def test_shuffle(self):
         items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971))
+        self.assertEqual(len(items), len(self.flattened_test_data))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
 
 
-    def test_buffered_shuffle_generator_buffer_size_one(self):
+    def test_shuffle_buffer_size_one(self):
         items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1))
+        self.assertEqual(len(items), len(self.flattened_test_data))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
 
 
+class TestChunkedDataset(TestBase):
     def test_no_shuffle(self):
         items = list(ChunkedDataset(self.data_dir, shuffle=False))
         self.assertListEqual(items, self.flattened_test_data)
@@ -104,6 +110,7 @@ class TestChunkedDataset(unittest.TestCase):
 
     def test_shuffle(self):
         items = list(ChunkedDataset(self.data_dir, shuffle=True))
+        self.assertEqual(len(items), len(self.flattened_test_data))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
 
     
