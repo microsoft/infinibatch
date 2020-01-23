@@ -1,34 +1,28 @@
 import gzip
+import itertools
 import os
-from random import Random
+import random
 from typing import Union, Iterable, Any
 
 
-class ChunkPermutationIterator:
-    def __init__(self, chunk_file_paths: list, repeat_infinitely: bool, random: Union[Random, None]):
+class InfinitePermutationIterator:
+    def __init__(self, items: list, seed: int):
         """
-        Shuffle and infinitely repeat chunk file paths, if desired.
-        
-        If repeat_infinitely is True and random is not None, the contents of chunk_file_paths are infinitely repeated in changing random permutations.
+        Infinitely generates permutations of the given items.
 
         Arguments:
-        chunk_file_paths -- list of paths to chunk files
-        repeat_infinitely -- should the data be repeated over and over?
-        random -- RNG used to shuffle chunks. If None, chunks are not shuffled.
+        items -- list of items
+        seed -- random seed used for shuffling
         """
-        self.chunk_file_paths = chunk_file_paths.copy()
-        self.repeat_infinitely = repeat_infinitely
-        self.random = random
+        self.items = items.copy()
+        self.random = random.Random(seed)
 
     
     def __iter__(self):
         while True:
-            if self.random:
-                self.random.shuffle(self.chunk_file_paths)
-            for chunk_file_path in self.chunk_file_paths:
-                yield chunk_file_path
-            if not self.repeat_infinitely:
-                return
+            self.random.shuffle(self.items)
+            for item in self.items:
+                yield item
 
 
 class ChunkedDataReader:
@@ -52,7 +46,7 @@ class ChunkedDataReader:
 
 
 class BufferedShuffleIterator:
-    def __init__(self, iterable: Iterable, buffer_size: int, random: Random):
+    def __init__(self, iterable: Iterable, buffer_size: int, random: random.Random):
         """
         Shuffles given iterable using a buffer.
         
@@ -112,7 +106,7 @@ class ChunkedDataset:
         self.buffer_size = buffer_size
         self.transform = transform
         if shuffle:
-            self.random = Random()
+            self.random = random.Random()
             if seed:
                 self.random.seed(seed)
         else:
@@ -120,10 +114,17 @@ class ChunkedDataset:
 
 
     def __iter__(self):
-        gen = ChunkPermutationIterator(self.chunk_file_paths, False, self.random)
+        if not self.shuffle:
+            gen = itertools.cycle(self.chunk_file_paths)
+        else:
+            gen = InfinitePermutationIterator(self.chunk_file_paths, 42)
+
         gen = ChunkedDataReader(gen)
+
         if self.shuffle:
             gen = BufferedShuffleIterator(gen, self.buffer_size, self.random)
+        
         if self.transform is not None:
             gen = (self.transform(item) for item in gen)
+        
         return gen.__iter__()
