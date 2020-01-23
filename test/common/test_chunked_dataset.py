@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import unittest
 
-from infinibatch.common.chunked_dataset import ChunkedDataset, InfinitePermutationIterator, ChunkedDataReader, BufferedShuffleIterator
+from infinibatch.common.chunked_dataset import ChunkedDataset, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator
 
 
 class TestBase(unittest.TestCase):
@@ -73,9 +73,9 @@ class TestInfinitePermutationIterator(TestBase):
         self.assertTrue(different)
 
 
-class TestChunkedDataReader(TestBase):    
+class TestChunkedDataIterator(TestBase):    
     def test(self):
-        items = list(ChunkedDataReader(self.chunk_file_paths))
+        items = list(ChunkedDataIterator(self.chunk_file_paths))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -91,8 +91,8 @@ class TestChunkedDataReader(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataReader([lf_file]))
-        crlf_dat = list(ChunkedDataReader([crlf_file]))
+        lf_data = list(ChunkedDataIterator([lf_file]))
+        crlf_dat = list(ChunkedDataIterator([crlf_file]))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)

@@ -6,15 +6,15 @@ from typing import Union, Iterable, Any
 
 
 class InfinitePermutationIterator:
-    def __init__(self, items: list, seed: int):
+    def __init__(self, iterable: Iterable[Any], seed: int):
         """
-        Infinitely generates permutations of the given items.
+        Infinitely generates permutations of the items in the given iterable.
 
         Arguments:
-        items -- list of items
+        iterable -- input iterable
         seed -- random seed used for shuffling
         """
-        self.items = items.copy()
+        self.items = list(iterable)
         self.random = Random(seed)
 
     def __iter__(self):
@@ -24,7 +24,7 @@ class InfinitePermutationIterator:
                 yield item
 
 
-class ChunkedDataReader:
+class ChunkedDataIterator:
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
         Reads data from chunks.
@@ -43,7 +43,7 @@ class ChunkedDataReader:
 
 
 class BufferedShuffleIterator:
-    def __init__(self, iterable: Iterable, buffer_size: int, seed: int):
+    def __init__(self, iterable: Iterable[Any], buffer_size: int, seed: int):
         """
         Shuffles given iterable using a buffer.
         
@@ -115,7 +115,7 @@ class ChunkedDataset:
         if self.num_instances > 1:
             chunks = itertools.islice(chunks, self.instance_rank, None, self.num_instances)
         
-        samples = ChunkedDataReader(chunks)
+        samples = ChunkedDataIterator(chunks)
         if self.shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = self.seed
