@@ -7,8 +7,10 @@ from typing import Union, Iterable, Any
 class ChunkPermutationIterator:
     def __init__(self, chunk_file_paths: list, repeat_infinitely: bool, random: Union[Random, None]):
         """
-        Reads data from chunks.
+        Shuffle and infinitely repeat chunk file paths, if desired.
         
+        If repeat_infinitely is True and random is not None, the contents of chunk_file_paths are infinitely repeated in changing random permutations.
+
         Arguments:
         chunk_file_paths -- list of paths to chunk files
         repeat_infinitely -- should the data be repeated over and over?
@@ -35,7 +37,7 @@ class ChunkedDataReader:
         Reads data from chunks.
         
         Arguments:
-        chunk_file_paths -- list of paths to chunk files
+        chunk_file_paths -- iterable of paths to chunk files
         """
         self.chunk_file_paths = chunk_file_paths
 
