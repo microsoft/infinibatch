@@ -83,7 +83,7 @@ class BufferedShuffleIterator:
 # @TODO: Change default buffer size to a more reasonable value.
 # @TODO: Support index files?
 class ChunkedDataset:
-    def __init__(self, paths: Union[str, Iterable[str]], shuffle=True, buffer_size=1024, transform=None, seed: int=None):
+    def __init__(self, paths: Union[str, Iterable[str]], shuffle=True, buffer_size=1024, transform=None, seed: int=None, num_instances=1, instance_rank=0):
         """
         Dataset reading data from gzipped chunks.
 
@@ -111,6 +111,8 @@ class ChunkedDataset:
                 self.random.seed(seed)
         else:
             self.random = None
+        self.num_instances = num_instances
+        self.instance_rank = instance_rank
 
 
     def __iter__(self):
@@ -118,6 +120,9 @@ class ChunkedDataset:
             gen = itertools.cycle(self.chunk_file_paths)
         else:
             gen = InfinitePermutationIterator(self.chunk_file_paths, 42)
+
+        if self.num_instances > 1:
+            gen = itertools.islice(gen, self.instance_rank, None, self.num_instances)
 
         gen = ChunkedDataReader(gen)
 
