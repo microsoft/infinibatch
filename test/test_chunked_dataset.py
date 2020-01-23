@@ -1,10 +1,11 @@
 import gzip
 import os
+import random
 import shutil
 import tempfile
 import unittest
 
-from infinibatch.common.chunked_dataset import ChunkedDataset, chunked_data_generator, buffered_shuffle_generator
+from infinibatch.common.chunked_dataset import ChunkedDataset, ChunkedDataReader, BufferedShuffleIterator
 
 
 class TestChunkedDataset(unittest.TestCase):
@@ -55,12 +56,12 @@ class TestChunkedDataset(unittest.TestCase):
 
 
     def test_chunked_data_generator_no_shuffle(self):
-        items = list(chunked_data_generator(self.chunk_file_paths, shuffle_chunks=False))
+        items = list(ChunkedDataReader(self.chunk_file_paths, random=None))
         self.assertListEqual(items, self.flattened_test_data)
 
 
     def test_chunked_data_generator_shuffle(self):
-        items = list(chunked_data_generator(self.chunk_file_paths, shuffle_chunks=True))
+        items = list(ChunkedDataReader(self.chunk_file_paths, random=random.Random()))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
 
     
@@ -77,8 +78,8 @@ class TestChunkedDataset(unittest.TestCase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(chunked_data_generator([lf_file], shuffle_chunks=False))
-        crlf_dat = list(chunked_data_generator([crlf_file], shuffle_chunks=False))
+        lf_data = list(ChunkedDataReader([lf_file], random=None))
+        crlf_dat = list(ChunkedDataReader([crlf_file], random=None))
 
         self.assertListEqual(lf_data, crlf_dat)
 
@@ -87,17 +88,13 @@ class TestChunkedDataset(unittest.TestCase):
 
 
     def test_buffered_shuffle_generator(self):
-        items = list(buffered_shuffle_generator(self.flattened_test_data.copy(), 971))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
 
 
     def test_buffered_shuffle_generator_buffer_size_one(self):
-        items = list(buffered_shuffle_generator(self.flattened_test_data.copy(), 1))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1))
         self.assertSetEqual(set(items), set(self.flattened_test_data))
-
-
-    def test_buffered_shuffle_generator_zero_buffer(self):
-        self.assertRaises(ValueError, buffered_shuffle_generator([1], 0).__next__)
 
 
     def test_no_shuffle(self):

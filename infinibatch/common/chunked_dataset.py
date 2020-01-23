@@ -3,56 +3,64 @@ import os
 from random import Random
 from typing import Union, Iterable, Any
 
-def chunked_data_generator(chunk_file_paths, random: Random):
-    """
-    Read and yield data from chunks.
-    
-    Arguments:
-    chunk_file_paths -- list of paths to chunk files
-    shuffle_chunks -- if true, the chunks are read in shuffled orders
-    """
-    chunk_file_paths = chunk_file_paths.copy()
 
-    if random:
-        random.shuffle(chunk_file_paths)
+class ChunkedDataReader:
+    def __init__(self, chunk_file_paths, random=Random()):
+        """
+        Reads data from chunks.
         
-    for chunk_file_path in chunk_file_paths:
-        with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
-            data = f.read().splitlines()
+        Arguments:
+        chunk_file_paths -- list of paths to chunk files
+        shuffle_chunks -- if true, the chunks are read in shuffled orders
+        """
+        self.chunk_file_paths = chunk_file_paths.copy()
+        self.random = random
 
-        for item in data:
-            yield item
-
-
-def buffered_shuffle_generator(data, buffer_size, random: Random):
-    """
-    Shuffle and yield given data using a buffer.
     
-    Arguments:
-    data -- iterable containing data
-    buffer_size -- size of the buffer in number of samples / data items used for shuffling
-    """
-    if buffer_size <= 0:
-        raise ValueError('The buffer size must be positive.')
+    def __iter__(self):
+        if self.random:
+            self.random.shuffle(self.chunk_file_paths)
+            
+        for chunk_file_path in self.chunk_file_paths:
+            with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
+                data = f.read().splitlines()
 
-    buffer = [None for _ in range(buffer_size)]
+            for item in data:
+                yield item
 
-    # shuffle data with a buffer:
-    # this is similar to what the Fisher-Yates shuffle does,
-    # but modified to run with a constant-size buffer
-    # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-    # this was inspired by an algorithm implemented in Kaldi
-    # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
-    for item in data:
-        index = random.randrange(0, len(buffer))
-        if buffer[index] is not None:
-            yield buffer[index]
-        buffer[index] = item
 
-    # flush buffer
-    for item in buffer:
-        if item is not None:
-            yield item
+class BufferedShuffleIterator:
+    def __init__(self, iterable, buffer_size, random=Random()):
+        """
+        Shuffles given iterable using a buffer.
+        
+        Arguments:
+        iterable -- input iterable
+        buffer_size -- size of the buffer in number of samples used for shuffling
+        random -- random number generator used for shuffling
+        """
+        self.iterable = iterable
+        self.buffer = [None for _ in range(buffer_size)]
+        self.random = random
+
+
+    def __iter__(self):
+        # shuffle data with a buffer:
+        # this is similar to what the Fisher-Yates shuffle does,
+        # but modified to run with a constant-size buffer
+        # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+        # this was inspired by an algorithm implemented in Kaldi
+        # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
+        for item in self.iterable:
+            index = self.random.randrange(0, len(self.buffer))
+            if self.buffer[index] is not None:
+                yield self.buffer[index]
+            self.buffer[index] = item
+
+        # flush buffer
+        for item in self.buffer:
+            if item is not None:
+                yield item
 
 
 # @TODO: Support non-zipped files.
@@ -87,9 +95,11 @@ class ChunkedDataset:
 
 
     def __iter__(self):
-        gen = chunked_data_generator(self.chunk_file_paths, self.random)
-        if self.random:
-            gen = buffered_shuffle_generator(gen, self.buffer_size, self.random)
+        if not self.shuffle:
+            gen = ChunkedDataReader(self.chunk_file_paths, random=None)
+        else:
+            gen = ChunkedDataReader(self.chunk_file_paths, random=self.random)
+            gen = BufferedShuffleIterator(gen, self.buffer_size, self.random)
         if self.transform is not None:
             gen = (self.transform(item) for item in gen)
-        return gen
+        return gen.__iter__()
