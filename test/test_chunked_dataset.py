@@ -54,6 +54,11 @@ class TestBase(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.data_dir)
 
+    
+    def assertMultisetEqual(self, a, b):
+        self.assertEqual(len(a), len(b))
+        self.assertSetEqual(set(a), set(b))
+
 
 class TestChunkedDataReader(TestBase):    
     def test_no_shuffle(self):
@@ -63,8 +68,7 @@ class TestChunkedDataReader(TestBase):
 
     def test_shuffle(self):
         items = list(ChunkedDataReader(self.chunk_file_paths, random=random.Random()))
-        self.assertEqual(len(items), len(self.flattened_test_data))
-        self.assertSetEqual(set(items), set(self.flattened_test_data))
+        self.assertMultisetEqual(items, self.flattened_test_data)
 
     
     def test_different_line_endings(self):
@@ -92,14 +96,12 @@ class TestChunkedDataReader(TestBase):
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
         items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971))
-        self.assertEqual(len(items), len(self.flattened_test_data))
-        self.assertSetEqual(set(items), set(self.flattened_test_data))
+        self.assertMultisetEqual(items, self.flattened_test_data)
 
 
     def test_shuffle_buffer_size_one(self):
         items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1))
-        self.assertEqual(len(items), len(self.flattened_test_data))
-        self.assertSetEqual(set(items), set(self.flattened_test_data))
+        self.assertMultisetEqual(items, self.flattened_test_data)
 
 
 class TestChunkedDataset(TestBase):
@@ -110,8 +112,7 @@ class TestChunkedDataset(TestBase):
 
     def test_shuffle(self):
         items = list(ChunkedDataset(self.data_dir, shuffle=True))
-        self.assertEqual(len(items), len(self.flattened_test_data))
-        self.assertSetEqual(set(items), set(self.flattened_test_data))
+        self.assertMultisetEqual(items, self.flattened_test_data)
 
     
     def test_other_files_present(self):
