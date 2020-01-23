@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import unittest
 
-from infinibatch.common.chunked_dataset import ChunkedDataset, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator
+from infinibatch.common.chunked_dataset import ChunkedDataset, _InfinitePermutationIterator, _ChunkedDataIterator, _BufferedShuffleIterator
 
 
 class TestBase(unittest.TestCase):
@@ -60,7 +60,7 @@ class TestBase(unittest.TestCase):
 
 class TestInfinitePermutationIterator(TestBase):
     def test_repeat_once(self):
-        reader = InfinitePermutationIterator(self.flattened_test_data, 42)
+        reader = _InfinitePermutationIterator(self.flattened_test_data, 42)
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
@@ -75,7 +75,7 @@ class TestInfinitePermutationIterator(TestBase):
 
 class TestChunkedDataIterator(TestBase):    
     def test(self):
-        items = list(ChunkedDataIterator(self.chunk_file_paths))
+        items = list(_ChunkedDataIterator(self.chunk_file_paths))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -91,8 +91,8 @@ class TestChunkedDataIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataIterator([lf_file]))
-        crlf_dat = list(ChunkedDataIterator([crlf_file]))
+        lf_data = list(_ChunkedDataIterator([lf_file]))
+        crlf_dat = list(_ChunkedDataIterator([crlf_file]))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -101,11 +101,11 @@ class TestChunkedDataIterator(TestBase):
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))
+        items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
+        items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
 

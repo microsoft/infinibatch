@@ -5,7 +5,7 @@ from random import Random
 from typing import Union, Iterable, Any
 
 
-class InfinitePermutationIterator:
+class _InfinitePermutationIterator:
     def __init__(self, iterable: Iterable[Any], seed: int):
         """
         Infinitely generates permutations of the items in the given iterable.
@@ -24,7 +24,7 @@ class InfinitePermutationIterator:
                 yield item
 
 
-class ChunkedDataIterator:
+class _ChunkedDataIterator:
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
         Reads data from chunks.
@@ -42,7 +42,7 @@ class ChunkedDataIterator:
                 yield item
 
 
-class BufferedShuffleIterator:
+class _BufferedShuffleIterator:
     def __init__(self, iterable: Iterable[Any], buffer_size: int, seed: int):
         """
         Shuffles given iterable using a buffer.
@@ -113,17 +113,17 @@ class ChunkedDataset:
         if not self._shuffle:
             chunks = itertools.cycle(self._chunk_file_paths)
         else:
-            chunks = InfinitePermutationIterator(self._chunk_file_paths, self._seed)
+            chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
             chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
         
-        samples = ChunkedDataIterator(chunks)
+        samples = _ChunkedDataIterator(chunks)
         if self._shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = self._seed
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
-            samples = BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
+            samples = _BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
         if self._transform is not None:
             samples = (self._transform(item) for item in samples)
         return iter(samples)
