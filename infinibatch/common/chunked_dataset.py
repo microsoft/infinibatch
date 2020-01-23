@@ -83,14 +83,16 @@ class ChunkedDataset:
         """
         Dataset reading data from gzipped chunks.
 
+        This dataset infinitely repeats the data.
+
         Arguments:
         paths -- path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
         shuffle -- if true, the data is shuffled
         buffer_size -- size of the buffer in number of samples / data items used for shuffling
         transform -- transform to be applied to each data item
         seed -- random seed
-        num_instances -- number of instances of this dataset used in (distributed) training
-        instance_rank -- rank of this dataset instance used in (distributed) training
+        num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+        instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
