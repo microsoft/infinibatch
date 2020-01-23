@@ -4,8 +4,8 @@ from random import Random
 from typing import Union, Iterable, Any
 
 
-class ChunkedDataReader:
-    def __init__(self, chunk_file_paths: Iterable[str], repeat_infinitely: bool, random: Union[Random, None]):
+class ChunkPermutationIterator:
+    def __init__(self, chunk_file_paths: list, repeat_infinitely: bool, random: Union[Random, None]):
         """
         Reads data from chunks.
         
@@ -23,16 +23,30 @@ class ChunkedDataReader:
         while True:
             if self.random:
                 self.random.shuffle(self.chunk_file_paths)
-                
             for chunk_file_path in self.chunk_file_paths:
-                with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
-                    data = f.read().splitlines()
-
-                for item in data:
-                    yield item
-
+                yield chunk_file_path
             if not self.repeat_infinitely:
                 return
+
+
+class ChunkedDataReader:
+    def __init__(self, chunk_file_paths: Iterable[str]):
+        """
+        Reads data from chunks.
+        
+        Arguments:
+        chunk_file_paths -- list of paths to chunk files
+        """
+        self.chunk_file_paths = chunk_file_paths
+
+    
+    def __iter__(self):
+        for chunk_file_path in self.chunk_file_paths:
+            with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
+                data = f.read().splitlines()
+
+            for item in data:
+                yield item
 
 
 class BufferedShuffleIterator:
@@ -95,16 +109,18 @@ class ChunkedDataset:
         self.shuffle = shuffle
         self.buffer_size = buffer_size
         self.transform = transform
-        self.random = Random()
-        if seed is not None:
-            self.random.seed(seed)
+        if shuffle:
+            self.random = Random()
+            if seed:
+                self.random.seed(seed)
+        else:
+            self.random = None
 
 
     def __iter__(self):
-        if not self.shuffle:
-            gen = ChunkedDataReader(self.chunk_file_paths, False, None)
-        else:
-            gen = ChunkedDataReader(self.chunk_file_paths, False, self.random)
+        gen = ChunkPermutationIterator(self.chunk_file_paths, False, self.random)
+        gen = ChunkedDataReader(gen)
+        if self.shuffle:
             gen = BufferedShuffleIterator(gen, self.buffer_size, self.random)
         if self.transform is not None:
             gen = (self.transform(item) for item in gen)

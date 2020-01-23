@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 
-from infinibatch.common.chunked_dataset import ChunkedDataset, ChunkedDataReader, BufferedShuffleIterator
+from infinibatch.common.chunked_dataset import ChunkedDataset, ChunkPermutationIterator, ChunkedDataReader, BufferedShuffleIterator
 
 
 class TestBase(unittest.TestCase):
@@ -61,28 +61,28 @@ class TestBase(unittest.TestCase):
         self.assertSetEqual(set(a), set(b))
 
 
-class TestChunkedDataReader(TestBase):    
+class TestChunkPermutationIterator(TestBase):
     def test_no_shuffle(self):
-        items = list(ChunkedDataReader(self.chunk_file_paths, False, None))
-        self.assertListEqual(items, self.flattened_test_data)
+        items = list(ChunkPermutationIterator(self.chunk_file_paths, False, None))
+        self.assertListEqual(items, self.chunk_file_paths)
 
 
     def test_shuffle(self):
-        items = list(ChunkedDataReader(self.chunk_file_paths, False, random.Random(42)))
-        self.assertMultisetEqual(items, self.flattened_test_data)
+        items = list(ChunkPermutationIterator(self.chunk_file_paths, False, random.Random(42)))
+        self.assertMultisetEqual(items, self.chunk_file_paths)
 
 
     def test_repeat_once_no_shuffle(self):
-        items = list(itertools.islice(ChunkedDataReader(self.chunk_file_paths, True, None), 2 * len(self.flattened_test_data)))
-        self.assertListEqual(items, self.flattened_test_data * 2)
+        items = list(itertools.islice(ChunkPermutationIterator(self.chunk_file_paths, True, None), 2 * len(self.chunk_file_paths)))
+        self.assertListEqual(items, self.chunk_file_paths * 2)
 
 
     def test_repeat_once_shuffle(self):
-        reader = ChunkedDataReader(self.chunk_file_paths, True, random.Random(42))
-        items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
-        items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
+        reader = ChunkPermutationIterator(self.chunk_file_paths, True, random.Random(42))
+        items0 = list(itertools.islice(reader, len(self.chunk_file_paths)))
+        items1 = list(itertools.islice(reader, len(self.chunk_file_paths)))
 
-        self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
+        self.assertMultisetEqual(items0 + items1, self.chunk_file_paths * 2)
         
         different = False
         for item0, item1 in zip(items0, items1):
@@ -91,7 +91,13 @@ class TestChunkedDataReader(TestBase):
                 break
         self.assertTrue(different)
 
+
+class TestChunkedDataReader(TestBase):    
+    def test(self):
+        items = list(ChunkedDataReader(self.chunk_file_paths))
+        self.assertListEqual(items, self.flattened_test_data)
     
+
     def test_different_line_endings(self):
         # write data in binary mode with LF line endings
         lf_dir = tempfile.mkdtemp()
@@ -105,8 +111,8 @@ class TestChunkedDataReader(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataReader([lf_file], False, None))
-        crlf_dat = list(ChunkedDataReader([crlf_file], False, None))
+        lf_data = list(ChunkedDataReader([lf_file]))
+        crlf_dat = list(ChunkedDataReader([crlf_file]))
 
         self.assertListEqual(lf_data, crlf_dat)
 
