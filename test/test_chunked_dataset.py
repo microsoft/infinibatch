@@ -1,7 +1,6 @@
 import gzip
 import itertools
 import os
-import random
 import shutil
 import tempfile
 import unittest
@@ -64,7 +63,6 @@ class TestInfinitePermutationIterator(TestBase):
         reader = InfinitePermutationIterator(self.flattened_test_data, 42)
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
-
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
         
         different = False
@@ -95,7 +93,6 @@ class TestChunkedDataReader(TestBase):
 
         lf_data = list(ChunkedDataReader([lf_file]))
         crlf_dat = list(ChunkedDataReader([crlf_file]))
-
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -104,11 +101,11 @@ class TestChunkedDataReader(TestBase):
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, random.Random(42)))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, random.Random(42)))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
 
@@ -128,6 +125,13 @@ class TestChunkedDataset(TestBase):
         modified_test_data = [transform(s) for s in self.flattened_test_data]
         items = list(itertools.islice(ChunkedDataset(self.data_dir, shuffle=False, transform=transform), len(self.flattened_test_data)))
         self.assertListEqual(items, modified_test_data)
+
+    def test_two_instances(self):
+        dataset0 = ChunkedDataset(self.data_dir, shuffle=False, num_instances=2, instance_rank=0)
+        dataset1 = ChunkedDataset(self.data_dir, shuffle=False, num_instances=2, instance_rank=1)
+        items0 = list(itertools.islice(dataset0, len(self.test_data[0]) + len(self.test_data[2])))
+        items1 = list(itertools.islice(dataset1, len(self.test_data[1]) + len(self.test_data[3])))
+        self.assertMultisetEqual(set(items0 + items1), self.flattened_test_data)
 
 
 if __name__ == '__main__':
