@@ -51,10 +51,8 @@ class TestBase(unittest.TestCase):
             with gzip.open(file_name, 'wt', encoding='utf-8') as f:
                 f.write(file_content)
 
-
     def tearDown(self):
         shutil.rmtree(self.data_dir)
-
     
     def assertMultisetEqual(self, a, b):
         self.assertEqual(len(a), len(b))
@@ -81,7 +79,6 @@ class TestChunkedDataReader(TestBase):
     def test(self):
         items = list(ChunkedDataReader(self.chunk_file_paths))
         self.assertListEqual(items, self.flattened_test_data)
-    
 
     def test_different_line_endings(self):
         # write data in binary mode with LF line endings
@@ -110,7 +107,6 @@ class TestBufferedShuffleIterator(TestBase):
         items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, random.Random(42)))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
-
     def test_shuffle_buffer_size_one(self):
         items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, random.Random(42)))
         self.assertMultisetEqual(items, self.flattened_test_data)
@@ -120,14 +116,12 @@ class TestChunkedDataset(TestBase):
     def test_no_shuffle(self):
         items = list(itertools.islice(ChunkedDataset(self.data_dir, shuffle=False), len(self.flattened_test_data)))
         self.assertListEqual(items, self.flattened_test_data)
-
     
     def test_other_files_present(self):
         with open(os.path.join(self.data_dir, 'i_do_not_belong_here.txt'), 'w') as f:
             f.write('really ...')
         items = list(itertools.islice(ChunkedDataset(self.data_dir, shuffle=False), len(self.flattened_test_data)))
         self.assertListEqual(items, self.flattened_test_data)
-
 
     def test_transform(self):
         transform = lambda s: s + '!'

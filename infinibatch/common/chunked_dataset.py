@@ -17,7 +17,6 @@ class InfinitePermutationIterator:
         self.items = items.copy()
         self.random = random.Random(seed)
 
-    
     def __iter__(self):
         while True:
             self.random.shuffle(self.items)
@@ -34,7 +33,6 @@ class ChunkedDataReader:
         chunk_file_paths -- iterable of paths to chunk files
         """
         self.chunk_file_paths = chunk_file_paths
-
     
     def __iter__(self):
         for chunk_file_path in self.chunk_file_paths:
@@ -58,7 +56,6 @@ class BufferedShuffleIterator:
         self.iterable = iterable
         self.buffer = [None for _ in range(buffer_size)]
         self.random = random
-
 
     def __iter__(self):
         # shuffle data with a buffer:
@@ -114,22 +111,16 @@ class ChunkedDataset:
         self.num_instances = num_instances
         self.instance_rank = instance_rank
 
-
     def __iter__(self):
         if not self.shuffle:
-            gen = itertools.cycle(self.chunk_file_paths)
+            chunks = itertools.cycle(self.chunk_file_paths)
         else:
-            gen = InfinitePermutationIterator(self.chunk_file_paths, 42)
-
+            chunks = InfinitePermutationIterator(self.chunk_file_paths, 42)
         if self.num_instances > 1:
-            gen = itertools.islice(gen, self.instance_rank, None, self.num_instances)
-
-        gen = ChunkedDataReader(gen)
-
+            chunks = itertools.islice(chunks, self.instance_rank, None, self.num_instances)
+        samples = ChunkedDataReader(chunks)
         if self.shuffle:
-            gen = BufferedShuffleIterator(gen, self.buffer_size, self.random)
-        
+            samples = BufferedShuffleIterator(samples, self.buffer_size, self.random)
         if self.transform is not None:
-            gen = (self.transform(item) for item in gen)
-        
-        return gen.__iter__()
+            samples = (self.transform(item) for item in samples)
+        return samples.__iter__()
