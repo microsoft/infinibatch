@@ -5,28 +5,34 @@ from typing import Union, Iterable, Any
 
 
 class ChunkedDataReader:
-    def __init__(self, chunk_file_paths, random=Random()):
+    def __init__(self, chunk_file_paths: Iterable[str], repeat_infinitely: bool, random: Union[Random, None]):
         """
         Reads data from chunks.
         
         Arguments:
         chunk_file_paths -- list of paths to chunk files
-        shuffle_chunks -- if true, the chunks are read in shuffled orders
+        repeat_infinitely -- should the data be repeated over and over?
+        random -- RNG used to shuffle chunks. If None, chunks are not shuffled.
         """
         self.chunk_file_paths = chunk_file_paths.copy()
+        self.repeat_infinitely = repeat_infinitely
         self.random = random
 
     
     def __iter__(self):
-        if self.random:
-            self.random.shuffle(self.chunk_file_paths)
-            
-        for chunk_file_path in self.chunk_file_paths:
-            with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
-                data = f.read().splitlines()
+        while True:
+            if self.random:
+                self.random.shuffle(self.chunk_file_paths)
+                
+            for chunk_file_path in self.chunk_file_paths:
+                with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
+                    data = f.read().splitlines()
 
-            for item in data:
-                yield item
+                for item in data:
+                    yield item
+
+            if not self.repeat_infinitely:
+                return
 
 
 class BufferedShuffleIterator:
@@ -96,9 +102,9 @@ class ChunkedDataset:
 
     def __iter__(self):
         if not self.shuffle:
-            gen = ChunkedDataReader(self.chunk_file_paths, random=None)
+            gen = ChunkedDataReader(self.chunk_file_paths, False, None)
         else:
-            gen = ChunkedDataReader(self.chunk_file_paths, random=self.random)
+            gen = ChunkedDataReader(self.chunk_file_paths, False, self.random)
             gen = BufferedShuffleIterator(gen, self.buffer_size, self.random)
         if self.transform is not None:
             gen = (self.transform(item) for item in gen)

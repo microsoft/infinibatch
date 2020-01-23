@@ -1,4 +1,5 @@
 import gzip
+import itertools
 import os
 import random
 import shutil
@@ -62,13 +63,33 @@ class TestBase(unittest.TestCase):
 
 class TestChunkedDataReader(TestBase):    
     def test_no_shuffle(self):
-        items = list(ChunkedDataReader(self.chunk_file_paths, random=None))
+        items = list(ChunkedDataReader(self.chunk_file_paths, False, None))
         self.assertListEqual(items, self.flattened_test_data)
 
 
     def test_shuffle(self):
-        items = list(ChunkedDataReader(self.chunk_file_paths, random=random.Random()))
+        items = list(ChunkedDataReader(self.chunk_file_paths, False, random.Random(42)))
         self.assertMultisetEqual(items, self.flattened_test_data)
+
+
+    def test_repeat_once_no_shuffle(self):
+        items = list(itertools.islice(ChunkedDataReader(self.chunk_file_paths, True, None), 2 * len(self.flattened_test_data)))
+        self.assertListEqual(items, self.flattened_test_data * 2)
+
+
+    def test_repeat_once_shuffle(self):
+        reader = ChunkedDataReader(self.chunk_file_paths, True, random.Random(42))
+        items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
+        items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
+
+        self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
+        
+        different = False
+        for item0, item1 in zip(items0, items1):
+            if item0 != item1:
+                different = True
+                break
+        self.assertTrue(different)
 
     
     def test_different_line_endings(self):
@@ -84,8 +105,8 @@ class TestChunkedDataReader(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataReader([lf_file], random=None))
-        crlf_dat = list(ChunkedDataReader([crlf_file], random=None))
+        lf_data = list(ChunkedDataReader([lf_file], False, None))
+        crlf_dat = list(ChunkedDataReader([crlf_file], False, None))
 
         self.assertListEqual(lf_data, crlf_dat)
 
