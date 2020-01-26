@@ -2,38 +2,47 @@ import gzip
 import itertools
 import os
 from random import Random
-from typing import Union, Iterable, Any
+from typing import Union, Iterable, Any, Callable, Optional
 
+# @BUGBUG: The -Iterator classes here are actually iterables. We should rename them accordingly.
 
 class _InfinitePermutationIterator:
+    _iterable: Iterable[Any]
+    _random: Random
+
     def __init__(self, iterable: Iterable[Any], seed: int):
         """
         Infinitely generates permutations of the items in the given iterable.
+
+        Unlike most classes here, this one loads all items into RAM. For example, this is used
+        for randomizing the pathnmaes of data blocks read by _CHunkedDataIterator.
 
         Arguments:
         iterable -- input iterable
         seed -- random seed used for shuffling
         """
-        self._items = list(iterable)
+        self._iterable = iterable
         self._random = Random(seed)
 
     def __iter__(self):
+        items = list(self._iterable)
         while True:
-            self._random.shuffle(self._items)
-            for item in self._items:
+            self._random.shuffle(items)
+            for item in items:
                 yield item
 
 
+# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 class _ChunkedDataIterator:
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
         Reads data from chunks.
-        
+
         Arguments:
         chunk_file_paths -- iterable of paths to chunk files
         """
         self._chunk_file_paths = chunk_file_paths
-    
+
     def __iter__(self):
         for chunk_file_path in self._chunk_file_paths:
             with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
@@ -43,17 +52,21 @@ class _ChunkedDataIterator:
 
 
 class _BufferedShuffleIterator:
-    def __init__(self, iterable: Iterable[Any], buffer_size: int, seed: int):
+    _iterable: Iterable[Any]
+    _buffer_size: int
+    _seed: Optional[int]
+
+    def __init__(self, iterable: Iterable[Any], buffer_size: int, seed: Optional[int]):
         """
         Shuffles given iterable using a buffer.
         
         Arguments:
         iterable -- input iterable over items to shuffle
         buffer_size -- size of the buffer in number of items used for shuffling
-        seed -- random seed used for shuffling
+        seed -- random seed used for shuffling (or None)
         """
         self._iterable = iterable
-        self._buffer = [None for _ in range(buffer_size)]
+        self._buffer_size = buffer_size
         self._random = Random(seed)
 
     def __iter__(self):
@@ -63,14 +76,15 @@ class _BufferedShuffleIterator:
         # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
         # this was inspired by an algorithm implemented in Kaldi
         # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
+        buffer = [None for _ in range(self._buffer_size)]
         for item in self._iterable:
-            index = self._random.randrange(0, len(self._buffer))
-            if self._buffer[index] is not None:
-                yield self._buffer[index]
-            self._buffer[index] = item
+            index = self._random.randrange(0, len(buffer))
+            if buffer[index] is not None:
+                yield buffer[index]
+            buffer[index] = item
 
         # flush buffer
-        for item in self._buffer:
+        for item in buffer:
             if item is not None:
                 yield item
 
@@ -79,7 +93,15 @@ class _BufferedShuffleIterator:
 # @TODO: Change default buffer size to a more reasonable value.
 # @TODO: Support index files?
 class ChunkedDataset:
-    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: int=None, num_instances: int=1, instance_rank: int=0):
+    _chunk_file_paths: Union[str, Iterable[str]]
+    _shuffle: bool
+    _buffer_size: int
+    _transform: Callable[[Any], Any] # @TODO: specify the signature
+    _seed: Optional[int]
+    _num_instances: int
+    _instance_rank: int
+
+    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
         """
         Dataset reading data from gzipped chunks.
 
@@ -90,7 +112,7 @@ class ChunkedDataset:
         shuffle -- if true, the data is shuffled
         buffer_size -- size of the buffer in number of samples / data items used for shuffling
         transform -- transform to be applied to each data item
-        seed -- random seed
+        seed -- random seed (or None)
         num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         """
