@@ -60,7 +60,7 @@ class TestBase(unittest.TestCase):
 
 class TestInfinitePermutationIterator(TestBase):
     def test_repeat_once(self):
-        reader = _InfinitePermutationIterator(self.flattened_test_data, 42)
+        reader = iter(_InfinitePermutationIterator(self.flattened_test_data, 42))
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)

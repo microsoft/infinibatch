@@ -8,9 +8,9 @@ from typing import Union, Iterable, Any, Callable, Optional
 
 class _InfinitePermutationIterator:
     _iterable: Iterable[Any]
-    _random: Random
+    _seed: Optional[int]
 
-    def __init__(self, iterable: Iterable[Any], seed: int):
+    def __init__(self, iterable: Iterable[Any], seed: Optional[int]):
         """
         Infinitely generates permutations of the items in the given iterable.
 
@@ -19,21 +19,24 @@ class _InfinitePermutationIterator:
 
         Arguments:
         iterable -- input iterable
-        seed -- random seed used for shuffling
+        seed -- random seed used for shuffling (or None)
         """
         self._iterable = iterable
-        self._random = Random(seed)
+        self._seed = seed
 
     def __iter__(self):
+        random = Random(self._seed)
         items = list(self._iterable)
         while True:
-            self._random.shuffle(items)
+            random.shuffle(items)
             for item in items:
                 yield item
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
+# @TODO: Support non-gzipped files as well
 class _ChunkedDataIterator:
+    _chunk_file_paths: Iterable[str]
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
         Reads data from chunks.
@@ -67,7 +70,7 @@ class _BufferedShuffleIterator:
         """
         self._iterable = iterable
         self._buffer_size = buffer_size
-        self._random = Random(seed)
+        self._seed = seed
 
     def __iter__(self):
         # shuffle data with a buffer:
@@ -76,9 +79,10 @@ class _BufferedShuffleIterator:
         # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
         # this was inspired by an algorithm implemented in Kaldi
         # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
+        random = Random(self._seed)
         buffer = [None for _ in range(self._buffer_size)]
         for item in self._iterable:
-            index = self._random.randrange(0, len(buffer))
+            index = random.randrange(0, len(buffer))
             if buffer[index] is not None:
                 yield buffer[index]
             buffer[index] = item
@@ -111,7 +115,7 @@ class ChunkedDataset:
         paths -- path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
         shuffle -- if true, the data is shuffled
         buffer_size -- size of the buffer in number of samples / data items used for shuffling
-        transform -- transform to be applied to each data item
+        transform -- transform to be applied to each data item  --@TOFO: specify its signature
         seed -- random seed (or None)
         num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
