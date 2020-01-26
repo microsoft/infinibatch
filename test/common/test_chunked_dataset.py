@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from typing import Iterable, Iterator, Any
 
 from infinibatch.common.chunked_dataset import ChunkedDataset, _InfinitePermutationIterator, _ChunkedDataIterator, _BufferedShuffleIterator
 
@@ -60,17 +61,21 @@ class TestBase(unittest.TestCase):
 
 class TestInfinitePermutationIterator(TestBase):
     def test_repeat_once(self):
-        reader = iter(_InfinitePermutationIterator(self.flattened_test_data, 42))
+        # This tests that two consecutive iterations through the test data yields differently ordered sequences.
+        reader: Iterator[Any] = iter(_InfinitePermutationIterator(self.flattened_test_data, 42))
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
-        
-        different = False
-        for item0, item1 in zip(items0, items1):
-            if item0 != item1:
-                different = True
-                break
-        self.assertTrue(different)
+        self.assertTrue(any(item0 != item1 for item0, item1 in zip(items0, items1)))
+
+    def test_reiter_once(self):
+        # This differs from test_repeat_once in that we don't call iter() before passing to islice().
+        # Hence, `reader` is an iterable, and iterating over it twice should yield the *same* sequence.
+        reader: Iterable[Any] = _InfinitePermutationIterator(self.flattened_test_data, 42)
+        items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
+        items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
+        self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
+        self.assertSequenceEqual(items0, items1)
 
 
 class TestChunkedDataIterator(TestBase):    
