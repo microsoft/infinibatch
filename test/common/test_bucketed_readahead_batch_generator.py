@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import sys, inspect
 
-from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadaheadBatchIterator
+from infinibatch.common.bucketed_readahead_batch_generator import IterableBucketedReadaheadBatchedDataset
 
 # @TODO: Maybe move this into a test utils class? Or just use a real reader.
 # class FakeIterableDataset: # just to have something to work with
@@ -35,7 +35,7 @@ from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadah
 # print(path)
 # ds = FakeIterableDataset("/home/fseide/factored-segmenter/src/FactoredSegmenter.cs")
 # batch_labels = 500
-# bg = BucketedReadaheadBatchIterator(ds, read_ahead=100, key=lambda line: len(line), batch_size=lambda line: batch_labels // (1+len(line)))
+# bg = IterableBucketedReadaheadBatchedDataset(ds, read_ahead=100, key=lambda line: len(line), batch_size=lambda line: batch_labels // (1+len(line)))
 # i = 0
 # for batch in bg:
 #     i = i + 1

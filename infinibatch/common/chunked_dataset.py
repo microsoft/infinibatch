@@ -4,9 +4,7 @@ import os
 from random import Random
 from typing import Union, Iterable, Any, Callable, Optional
 
-# @BUGBUG: The -Iterator classes here are actually iterables. We should rename them accordingly.
-
-class _InfinitePermutationIterator:
+class _IterableInfinitePermutation:
     _iterable: Iterable[Any]
     _seed: Optional[int]
 
@@ -15,7 +13,7 @@ class _InfinitePermutationIterator:
         Infinitely generates permutations of the items in the given iterable.
 
         Unlike most classes here, this one loads all items into RAM. For example, this is used
-        for randomizing the pathnmaes of data blocks read by _CHunkedDataIterator.
+        for randomizing the pathnmaes of data blocks read by _IterableChunkedData.
 
         Arguments:
         iterable -- input iterable
@@ -35,7 +33,7 @@ class _InfinitePermutationIterator:
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 # @TODO: Support non-gzipped files as well
-class _ChunkedDataIterator:
+class _IterableChunkedData:
     _chunk_file_paths: Iterable[str]
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
@@ -54,7 +52,7 @@ class _ChunkedDataIterator:
                 yield item
 
 
-class _BufferedShuffleIterator:
+class _IterableBufferedShuffler:
     _iterable: Iterable[Any]
     _buffer_size: int
     _seed: Optional[int]
@@ -96,7 +94,7 @@ class _BufferedShuffleIterator:
 # @TODO: Support non-zipped files.
 # @TODO: Change default buffer size to a more reasonable value.
 # @TODO: Support index files?
-class ChunkedDataset:
+class IterableChunkedDataset:
     _chunk_file_paths: Union[str, Iterable[str]]
     _shuffle: bool
     _buffer_size: int
@@ -115,7 +113,7 @@ class ChunkedDataset:
         paths -- path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
         shuffle -- if true, the data is shuffled
         buffer_size -- size of the buffer in number of samples / data items used for shuffling
-        transform -- transform to be applied to each data item  --@TOFO: specify its signature
+        transform -- transform to be applied to each data item  --@TODO: specify its signature
         seed -- random seed (or None)
         num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
@@ -139,17 +137,17 @@ class ChunkedDataset:
         if not self._shuffle:
             chunks = itertools.cycle(self._chunk_file_paths)
         else:
-            chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
+            chunks = _IterableInfinitePermutation(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
             chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
         
-        samples = _ChunkedDataIterator(chunks)
+        samples = _IterableChunkedData(chunks)
         if self._shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = self._seed
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
-            samples = _BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
+            samples = _IterableBufferedShuffler(samples, self._buffer_size, buffered_shuffle_iterator_seed)
         if self._transform is not None:
             samples = (self._transform(item) for item in samples)
         return iter(samples)
