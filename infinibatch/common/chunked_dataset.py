@@ -2,7 +2,119 @@ import gzip
 import itertools
 import os
 from random import Random
-from typing import Union, Iterable, Any, Callable, Optional
+from typing import Union, Iterable, Iterator, List, Any, Callable, Optional
+
+# Note: All Iterables here are now Iterators
+
+# wrapper around standard Python Iterators
+# This class itself has no state. Instead, state is encapsulated by three lambdas that are passed in.
+# Implements iterator protocol, i.e. next() and iter(), but also get_checkpoint() and iter_from_checkpoint().
+class CheckpointedIteratorWrapper():
+    _next_fn: Callable[[], Any]
+    _get_checkpoint_fn: Callable[[], List[Any]]
+    _iter_from_checkpoint_fn: Callable[[List[Any]], None]
+
+    def __init__(self, next: Callable[[], Any], get_checkpoint: Callable[[], List[Any]], iter_from_checkpoint: Callable[[List[Any]], None]):
+        self._next_fn = next
+        self._get_checkpoint_fn = get_checkpoint
+        self._iter_from_checkpoint_fn = iter_from_checkpoint
+
+    def get_checkpoint(self) -> List[Any]:
+        return self._get_checkpoint_fn()
+
+    def iter_from_checkpoint(self, checkpoint: List[Any]):
+        return self._iter_from_checkpoint_fn(checkpoint)
+    
+    def __next__(self):
+        return self._next_fn()
+    
+    def __iter__(self):
+        return self
+
+
+# stolen from CNTK
+class Struct(dict):
+    '''
+    Easy construction of a record (=immutable singleton class) from keyword arguments.
+
+    Example:
+        >>> r = Record(x = 13, y = 42)
+        >>> r.x
+            13
+
+    Args:
+        kwargs: keyword arguments to turn into the record members
+
+    Returns:
+        A singleton class instance that has all passed kw args as class members.
+    '''
+    def __init__(self, **args_dict):
+        super(Struct, self).__init__(args_dict)
+        self.__dict__.update(args_dict)
+    #def __getattr__(self, key):
+    #    if key not in self:
+    #        raise AttributeError("Struct has no attribute '{}'".format(key))
+    #    return self[key]
+
+    #def __setattr__(self, key, value):
+    #    if key not in self:
+    #        raise AttributeError("Struct has no attribute '{}'".format(key))
+    #    self[key] = value
+
+
+def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], checkpoint: Optional[List[Any]] = None):
+    """
+    Infinitely generates permutations of the items in the given iterable.
+
+    Unlike most classes here, this one loads all items into RAM. For example, this is used
+    for randomizing the pathnanes of data blocks read by _IterableChunkedData.
+
+    Arguments:
+    iterator -- input iterator
+    seed -- random seed used for shuffling (or None)
+    """
+    original_items = list(items)  # keep a local copy, since items is an iterator
+
+    random = Random(seed)
+    state = Struct(random_state = random.getstate(), item_count = 0)
+
+    def _items_shuffled() -> Iterator[Any]:
+        shuffled_items = list(original_items)
+        state.random_state = random.getstate() # remember random state before shuffling
+        #print(sum(state.random_state[1]))
+        #print(sum(random.getstate()[1]))
+        random.shuffle(shuffled_items)
+        state.item_count = 0
+        #print(shuffled_items)
+        return iter(shuffled_items)
+
+    def generator():
+        if checkpoint is not None: # restore the shuffled_items array
+            #print("setting", sum(checkpoint[0].random_state[1]))
+            random.setstate(checkpoint[0].random_state)
+            #print(sum(random.getstate()[1]))
+        shuffled_iterator = _items_shuffled()
+        if checkpoint is not None:  # fast-forward to the position inside the items
+            for i in range(checkpoint[0].item_count):
+                next(shuffled_iterator)
+            #itertools.islice(shuffled_iterator, checkpoint[0].item_count) # BUGBUG: This is not the same. Why?
+            state.item_count += checkpoint[0].item_count
+        while True:
+            for item in shuffled_iterator:
+                state.item_count += 1
+                #print(state.item_count, item)
+                yield item
+            shuffled_iterator = _items_shuffled()
+    iterator = generator()
+    
+    def get_checkpoint() -> List[Any]:
+        return [Struct(random_state = state.random_state, item_count = state.item_count)]
+    
+    def iter_from_checkpoint(checkpoint: List[Any]):
+        return infinite_permutation_iterator(original_items, seed, checkpoint)
+    
+    return CheckpointedIteratorWrapper(next = lambda: next(iterator), get_checkpoint = get_checkpoint, iter_from_checkpoint = iter_from_checkpoint)
+
 
 class _IterableInfinitePermutation:
     _iterable: Iterable[Any]
@@ -137,7 +249,7 @@ class IterableChunkedDataset:
         if not self._shuffle:
             chunks = itertools.cycle(self._chunk_file_paths)
         else:
-            chunks = _IterableInfinitePermutation(self._chunk_file_paths, self._seed)
+            chunks = infinite_permutation_iterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
             chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
         
@@ -151,3 +263,18 @@ class IterableChunkedDataset:
         if self._transform is not None:
             samples = (self._transform(item) for item in samples)
         return iter(samples)
+
+# TODO: make this the test
+random = Random()
+for i in range(5):
+    reader: Iterable[Any] = infinite_permutation_iterator(range(random.randrange(5,25)), seed=i)
+    items0 = list(itertools.islice(reader, random.randrange(5,25)))
+    print('items0', items0)
+    c = reader.get_checkpoint()
+    rng = random.randrange(5,25)
+    items1 = list(itertools.islice(reader, rng))
+    print('items1a', items1)
+    r2 = reader.iter_from_checkpoint(c)
+    items1r = list(itertools.islice(r2, rng))
+    print('items1b', items1r)
+    assert items1 == items1r
