@@ -4,7 +4,15 @@ import os
 from random import Random
 from typing import Union, Iterable, Iterator, List, Any, Callable, Optional
 
-# Note: All Iterables here are now Iterators
+
+# simple class definition and instance creation in one
+# e.g. x = Struct(a=13, b=42) then use x.a and x.b
+class Struct:
+    def __init__(self, **args_dict):
+        self.__dict__.update(args_dict)
+    def copy(self):
+        return Struct(**dict(self.__dict__.items()))
+
 
 # wrapper around standard Python Iterators
 # This class itself has no state. Instead, state is encapsulated by three lambdas that are passed in.
@@ -26,21 +34,13 @@ class CheckpointedIteratorWrapper():
         return self
 
 
-# simple class definition and instance creation in one
-# e.g. x = Struct(a=13, b=42) then use x.a and x.b
-class Struct:
-    def __init__(self, **args_dict):
-        self.__dict__.update(args_dict)
-    def copy(self):
-        return Struct(**dict(self.__dict__.items()))
-
-
-def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[List[Any]] = None):
+# NOTE: after many changes below, this code may no longer run
+def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[Any] = None):
     """
     Infinitely generates permutations of the items in the given iterable.
 
     Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnanes of data blocks read by _IterableChunkedData.
+    for randomizing the pathnames of data blocks read by _IterableChunkedData.
 
     Arguments:
     iterator -- input iterator
@@ -54,9 +54,9 @@ def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], fro
     def generator():
         # create and reset random generator
         random = Random(seed)
-        if from_checkpoint is not None and from_checkpoint[0].random_state is not None:  # restore the shuffled_items array
-            random.setstate(from_checkpoint[0].random_state)
-        skip_to_checkpoint = from_checkpoint[0].item_count if from_checkpoint is not None else 0
+        if from_checkpoint is not None and from_checkpoint.random_state is not None:  # restore the shuffled_items array
+            random.setstate(from_checkpoint.random_state)
+        skip_to_checkpoint = from_checkpoint.item_count if from_checkpoint is not None else 0
         # loop over items, reshuffle before each pass
         while True:
             # (re-)shuffle all items
@@ -79,7 +79,7 @@ def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], fro
     iterator = generator()
     return CheckpointedIteratorWrapper( # wrap in a class that implements both iterator and checkpointing protocols
             next                 = lambda: next(iterator),
-            get_checkpoint       = lambda: [current_checkpoint_state.copy()], # uses a list so we can embed nested checkpoint states 
+            get_checkpoint       = lambda: current_checkpoint_state.copy(),
             iter_from_checkpoint = lambda from_checkpoint: infinite_permutation_iterator(original_items, seed, from_checkpoint))
 
 
@@ -88,15 +88,14 @@ class InfinitePermutationIterator:  # ...how to say in Python: "implements inter
     Infinitely generates permutations of the items in the given iterable.
 
     Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnanes of data blocks read by _IterableChunkedData.
+    for randomizing the pathnames of data blocks read by _IterableChunkedData.
 
     Arguments:
     iterator -- input iterator
     seed -- random seed used for shuffling (or None)
-    from_checkpoint -- checkpoint info obtained by get_checkpoint(), will advance to this point
     """
     # constructor arguments
-    _original_items: List[Any]  # if source iterator is not checkpointable, we must instead keep a full copy
+    _original_items: List[Any]  # note: in this case, the source iterator is not checkpointable, hence we must instead keep a full copy
     _seed: Optional[int]
 
     # output iterator that generates our output sequence
@@ -106,24 +105,28 @@ class InfinitePermutationIterator:  # ...how to say in Python: "implements inter
     _random_state: Any
     _item_count: int
 
-    def __init__(self, items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[List[Any]] = None):
+    def __init__(self, items: Iterator[Any], seed: Optional[int]):
         # keep arguments for iter_from_checkpoint
         self._original_items = list(items)  # keep a local copy, since items is an iterator
         self._seed = seed
-        self.__setstate__(from_checkpoint)
+        self._iterator = None  # created lazily
 
-    # Iterator protocol:
+    # implementation of Iterator protocol:
     def __iter__(self):
-        return iter(self._iterator)  # or better return self, so that returned iterator is still checkpointed?
+        return self
     
     def __next__(self):
+        if not self._iterator:
+            self.__setstate__(from_checkpoint=None)
         return next(self._iterator)
 
-    # Checkpointing protocol:
+    # implementation of Checkpointing protocol:
     # Names are inspired by pickle https://docs.python.org/2/library/pickle.html.
     # But they look ugly when called from user code. We can use the non-__ names, like Random.
     def __getstate__(self):
-        return [Struct(random_state = self._random_state, item_count = self._item_count)]
+        return Struct(random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
+                      item_count   = self._item_count,    # how many items have already been served from the current shuffling
+                      nested_state = None)                # state of underlying iterator (not in this example)
 
     def __setstate__(self, from_checkpoint):
         # We define the iteration itself as a generator for ease of implementation.
@@ -131,15 +134,15 @@ class InfinitePermutationIterator:  # ...how to say in Python: "implements inter
         def _generator():
             # create and reset random generator
             random = Random(self._seed)
-            if from_checkpoint is not None and from_checkpoint[0].random_state is not None:  # restore the shuffled_items array
-                random.setstate(from_checkpoint[0].random_state)
-            skip_to_checkpoint = from_checkpoint[0].item_count if from_checkpoint is not None else 0
+            if from_checkpoint is not None and from_checkpoint.random_state is not None:  # restore the shuffled_items array
+                random.setstate(from_checkpoint.random_state)
+            skip_to_checkpoint = from_checkpoint.item_count if from_checkpoint is not None else 0  # items to skip in order to advance to checkpoint
             # main outer loop for infinite passes over items (reshuffle before each pass)
             while True:
                 # (re-)shuffle all items
                 self._random_state = random.getstate()  # remember random state before shuffling
                 self._item_count   = 0
-                shuffled_items = self._original_items[:]
+                shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use __setstate__(from_checkpoint.nested_state) on it
                 random.shuffle(shuffled_items)
                 shuffled_iterator = iter(shuffled_items)
                 # skip initial items when restarting from checkpoint
@@ -147,20 +150,22 @@ class InfinitePermutationIterator:  # ...how to say in Python: "implements inter
                     for i in range(skip_to_checkpoint):
                         next(shuffled_iterator)
                     self._item_count += skip_to_checkpoint
-                    skip_to_checkpoint = 0  # only the first time
+                    skip_to_checkpoint = 0  # done skipping
                 # main inner loop over items
                 for item in shuffled_iterator:
                     self._item_count += 1  # record how many items we have served from this pass over the items
                     yield item
         self._iterator = _generator()
 
-    # alternative checkpointing protocol:
+    # alternative Checkpointing protocol:
     # To reset to checkpoint, a new instance of this class is created (instead of just the inner _iterator).
-    def get_checkpoint(self):  # this is identical to getstate()
-        return [Struct(random_state = self._random_state, item_count = self._item_count)]
+    def get_checkpoint(self):
+        return self.__getstate__()
     
     def iter_from_checkpoint(self, from_checkpoint):
-        return InfinitePermutationIterator(self._original_items, self._seed, from_checkpoint)
+        i = InfinitePermutationIterator(self._original_items, self._seed)
+        i.__setstate__(from_checkpoint)
+        return i
 
 
 class _IterableInfinitePermutation:
