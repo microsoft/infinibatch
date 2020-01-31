@@ -83,6 +83,74 @@ def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], fro
             iter_from_checkpoint = lambda from_checkpoint: infinite_permutation_iterator(original_items, seed, from_checkpoint))
 
 
+class InfinitePermutationIterator:
+    _original_items: List[Any]
+    _seed: Optional[int]
+
+    _iterator: Iterator[Any]
+    _random_state: Any
+    _item_count: int
+
+    """
+    Infinitely generates permutations of the items in the given iterable.
+
+    Unlike most classes here, this one loads all items into RAM. For example, this is used
+    for randomizing the pathnanes of data blocks read by _IterableChunkedData.
+
+    Arguments:
+    iterator -- input iterator
+    seed -- random seed used for shuffling (or None)
+    from_checkpoint -- checkpoint info obtained by get_checkpoint(), will advance to this point
+    """
+    def __init__(self, items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[List[Any]] = None):
+        # keep arguments for iter_from_checkpoint
+        self._original_items = list(items)  # keep a local copy, since items is an iterator
+        self._seed = seed
+        self.setstate(from_checkpoint)
+    
+    def getstate(self):
+        return self.get_checkpoint()
+
+    def setstate(self, from_checkpoint):
+        def _generator():
+            # create and reset random generator
+            random = Random(self._seed)
+            if from_checkpoint is not None and from_checkpoint[0].random_state is not None:  # restore the shuffled_items array
+                random.setstate(from_checkpoint[0].random_state)
+            skip_to_checkpoint = from_checkpoint[0].item_count if from_checkpoint is not None else 0
+            # loop over items, reshuffle before each pass
+            while True:
+                # (re-)shuffle all items
+                self._random_state = random.getstate()  # remember random state before shuffling
+                self._item_count   = 0
+                shuffled_items = self._original_items[:]
+                random.shuffle(shuffled_items)
+                shuffled_iterator = iter(shuffled_items)
+                # skip initial items when restarting from checkpoint
+                if skip_to_checkpoint:
+                    for i in range(skip_to_checkpoint):
+                        next(shuffled_iterator)
+                    self._item_count += skip_to_checkpoint
+                    skip_to_checkpoint = 0  # only the first time
+                # loop over items
+                for item in shuffled_iterator:
+                    self._item_count += 1  # record how many items we have served from this pass over the items
+                    yield item
+        self._iterator = _generator()
+    
+    def __iter__(self):
+        return iter(self._iterator)
+    
+    def __next__(self):
+        return next(self._iterator)
+
+    def get_checkpoint(self):
+        return [Struct(random_state = self._random_state, item_count = self._item_count)]
+    
+    def iter_from_checkpoint(self, from_checkpoint):
+        return InfinitePermutationIterator(self._original_items, self._seed, from_checkpoint)
+
+
 class _IterableInfinitePermutation:
     _iterable: Iterable[Any]
     _seed: Optional[int]
@@ -234,7 +302,7 @@ class IterableChunkedDataset:
 # TODO: make this the test
 random = Random()
 for i in range(5):
-    reader: Iterable[Any] = infinite_permutation_iterator(range(random.randrange(5,25)), seed=i)
+    reader: Iterable[Any] = InfinitePermutationIterator(range(random.randrange(5,25)), seed=i)
     items0 = list(itertools.islice(reader, random.randrange(5,25)))
     print('items0', items0)
     c = reader.get_checkpoint()
