@@ -32,37 +32,16 @@ class CheckpointedIteratorWrapper():
         return self
 
 
-# stolen from CNTK
-class Struct(dict):
-    '''
-    Easy construction of a record (=immutable singleton class) from keyword arguments.
-
-    Example:
-        >>> r = Record(x = 13, y = 42)
-        >>> r.x
-            13
-
-    Args:
-        kwargs: keyword arguments to turn into the record members
-
-    Returns:
-        A singleton class instance that has all passed kw args as class members.
-    '''
+# simple class definition and instance creation in one
+# e.g. x = Struct(a=13, b=42) then use x.a and x.b
+class Struct:
     def __init__(self, **args_dict):
-        super(Struct, self).__init__(args_dict)
         self.__dict__.update(args_dict)
-    #def __getattr__(self, key):
-    #    if key not in self:
-    #        raise AttributeError("Struct has no attribute '{}'".format(key))
-    #    return self[key]
-
-    #def __setattr__(self, key, value):
-    #    if key not in self:
-    #        raise AttributeError("Struct has no attribute '{}'".format(key))
-    #    self[key] = value
+    def copy(self):
+        return Struct(**dict(self.__dict__.items()))
 
 
-def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], checkpoint: Optional[List[Any]] = None):
+def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[List[Any]] = None):
     """
     Infinitely generates permutations of the items in the given iterable.
 
@@ -72,48 +51,43 @@ def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], che
     Arguments:
     iterator -- input iterator
     seed -- random seed used for shuffling (or None)
+    from_checkpoint -- checkpoint info obtained by get_checkpoint(), will advance to this point
     """
     original_items = list(items)  # keep a local copy, since items is an iterator
 
-    random = Random(seed)
-    state = Struct(random_state = random.getstate(), item_count = 0)
-
-    def _items_shuffled() -> Iterator[Any]:
-        shuffled_items = list(original_items)
-        state.random_state = random.getstate() # remember random state before shuffling
-        #print(sum(state.random_state[1]))
-        #print(sum(random.getstate()[1]))
-        random.shuffle(shuffled_items)
-        state.item_count = 0
-        #print(shuffled_items)
-        return iter(shuffled_items)
+    current_checkpoint_state = Struct(random_state = None, item_count = 0) # from_checkpoint of ongoing iteration
 
     def generator():
-        if checkpoint is not None: # restore the shuffled_items array
-            #print("setting", sum(checkpoint[0].random_state[1]))
-            random.setstate(checkpoint[0].random_state)
-            #print(sum(random.getstate()[1]))
+        # create and reset random generator
+        random = Random(seed)
+        if from_checkpoint is not None and from_checkpoint[0].random_state is not None: # restore the shuffled_items array
+            random.setstate(from_checkpoint[0].random_state)
+        # get first shuffled set
+        def _items_shuffled() -> Iterator[Any]: # helper to generate the next shuffled version of original_items
+            shuffled_items = original_items[:]
+            current_checkpoint_state.random_state = random.getstate() # remember random state before shuffling
+            current_checkpoint_state.item_count = 0
+            random.shuffle(shuffled_items)
+            return iter(shuffled_items)
         shuffled_iterator = _items_shuffled()
-        if checkpoint is not None:  # fast-forward to the position inside the items
-            for i in range(checkpoint[0].item_count):
+        # fast-forward if from_checkpoint given
+        if from_checkpoint is not None:
+            for i in range(from_checkpoint[0].item_count):
                 next(shuffled_iterator)
-            #itertools.islice(shuffled_iterator, checkpoint[0].item_count) # BUGBUG: This is not the same. Why?
-            state.item_count += checkpoint[0].item_count
+            #itertools.islice(shuffled_iterator, from_checkpoint[0].item_count) # BUGBUG: This is not the same. Why?
+            current_checkpoint_state.item_count += from_checkpoint[0].item_count
+        # iterate infinitely with reshuffle after each pass
         while True:
             for item in shuffled_iterator:
-                state.item_count += 1
-                #print(state.item_count, item)
+                current_checkpoint_state.item_count += 1
                 yield item
             shuffled_iterator = _items_shuffled()
+
     iterator = generator()
-    
-    def get_checkpoint() -> List[Any]:
-        return [Struct(random_state = state.random_state, item_count = state.item_count)]
-    
-    def iter_from_checkpoint(checkpoint: List[Any]):
-        return infinite_permutation_iterator(original_items, seed, checkpoint)
-    
-    return CheckpointedIteratorWrapper(next = lambda: next(iterator), get_checkpoint = get_checkpoint, iter_from_checkpoint = iter_from_checkpoint)
+    return CheckpointedIteratorWrapper( # wrap in a class that implements both iterator and checkpointing protocols
+            next                 = lambda: next(iterator),
+            get_checkpoint       = lambda: [current_checkpoint_state.copy()], # uses a list so we can embed nested checkpoint states 
+            iter_from_checkpoint = lambda from_checkpoint: infinite_permutation_iterator(original_items, seed, from_checkpoint))
 
 
 class _IterableInfinitePermutation:
