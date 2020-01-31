@@ -311,20 +311,26 @@ class IterableChunkedDataset:
             samples = (self._transform(item) for item in samples)
         return iter(samples)
 
-# TODO: make this the test
+# TODO: make this a real test
 random = Random()
-for i in range(5):
-    reader: Iterable[Any] = InfinitePermutationIterator(range(random.randrange(5,25)), seed=i)
-    items0 = list(itertools.islice(reader, random.randrange(5,25)))
+for i in range(20):
+    # random sequence lengths to for testing different configurations
+    test_source_length        = random.randrange(5,25)
+    test_first_output_length  = random.randrange(5,25)
+    test_second_output_length = random.randrange(5,25)
+    # source
+    test_source = range(test_source_length)
+    reader: Iterable[Any] = InfinitePermutationIterator(test_source, seed=i)
+    # fetch a first sequence
+    items0 = list(itertools.islice(reader, test_first_output_length))
     print('items0', items0)
-    #c = reader.get_checkpoint()
-    c = reader.__getstate__()
-    rng = random.randrange(5,25)
-    items1a = list(itertools.islice(reader, rng))
+    # fetch a second sequence
+    checkpoint = reader.__getstate__()
+    items1a = list(itertools.islice(reader, test_second_output_length))
     print('items1a', items1a)
-    #r2 = reader.iter_from_checkpoint(c)
-    #items1r = list(itertools.islice(r2, rng))
-    reader.__setstate__(c)
-    items1b = list(itertools.islice(reader, rng))
+    # fetch that second sequence again via checkpointing
+    reader.__setstate__(checkpoint)
+    items1b = list(itertools.islice(reader, test_second_output_length))
     print('items1b', items1b)
+    # must be the same
     assert items1a == items1b
