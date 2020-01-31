@@ -10,23 +10,17 @@ from typing import Union, Iterable, Iterator, List, Any, Callable, Optional
 # This class itself has no state. Instead, state is encapsulated by three lambdas that are passed in.
 # Implements iterator protocol, i.e. next() and iter(), but also get_checkpoint() and iter_from_checkpoint().
 class CheckpointedIteratorWrapper():
-    _next_fn: Callable[[], Any]
-    _get_checkpoint_fn: Callable[[], List[Any]]
-    _iter_from_checkpoint_fn: Callable[[List[Any]], None]
+    _next: Callable[[], Any]
+    get_checkpoint:       Callable[[], List[Any]]       # these are callable member functions
+    iter_from_checkpoint: Callable[[List[Any]], None]
 
     def __init__(self, next: Callable[[], Any], get_checkpoint: Callable[[], List[Any]], iter_from_checkpoint: Callable[[List[Any]], None]):
-        self._next_fn = next
-        self._get_checkpoint_fn = get_checkpoint
-        self._iter_from_checkpoint_fn = iter_from_checkpoint
-
-    def get_checkpoint(self) -> List[Any]:
-        return self._get_checkpoint_fn()
-
-    def iter_from_checkpoint(self, checkpoint: List[Any]):
-        return self._iter_from_checkpoint_fn(checkpoint)
+        self.get_checkpoint       = get_checkpoint        # these are now callable members
+        self.iter_from_checkpoint = iter_from_checkpoint
+        self._next                = next                  # does not work with __next__, which is special   
     
     def __next__(self):
-        return self._next_fn()
+        return self._next()
     
     def __iter__(self):
         return self
