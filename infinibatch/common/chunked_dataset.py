@@ -83,14 +83,7 @@ def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], fro
             iter_from_checkpoint = lambda from_checkpoint: infinite_permutation_iterator(original_items, seed, from_checkpoint))
 
 
-class InfinitePermutationIterator:
-    _original_items: List[Any]
-    _seed: Optional[int]
-
-    _iterator: Iterator[Any]
-    _random_state: Any
-    _item_count: int
-
+class InfinitePermutationIterator:  # ...how to say in Python: "implements interfaces Iterator[Any], Checkpointing"
     """
     Infinitely generates permutations of the items in the given iterable.
 
@@ -102,23 +95,46 @@ class InfinitePermutationIterator:
     seed -- random seed used for shuffling (or None)
     from_checkpoint -- checkpoint info obtained by get_checkpoint(), will advance to this point
     """
+    # constructor arguments
+    _original_items: List[Any]  # if source iterator is not checkpointable, we must instead keep a full copy
+    _seed: Optional[int]
+
+    # output iterator that generates our output sequence
+    _iterator: Iterator[Any]
+
+    # iteration state. This is returned when requesting the checkpoint, and restored when resetting to checkpoint.
+    _random_state: Any
+    _item_count: int
+
     def __init__(self, items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[List[Any]] = None):
         # keep arguments for iter_from_checkpoint
         self._original_items = list(items)  # keep a local copy, since items is an iterator
         self._seed = seed
-        self.setstate(from_checkpoint)
-    
-    def getstate(self):
-        return self.get_checkpoint()
+        self.__setstate__(from_checkpoint)
 
-    def setstate(self, from_checkpoint):
+    # Iterator protocol:
+    def __iter__(self):
+        return iter(self._iterator)  # or better return self, so that returned iterator is still checkpointed?
+    
+    def __next__(self):
+        return next(self._iterator)
+
+    # Checkpointing protocol:
+    # Names are inspired by pickle https://docs.python.org/2/library/pickle.html.
+    # But they look ugly when called from user code. We can use the non-__ names, like Random.
+    def __getstate__(self):
+        return [Struct(random_state = self._random_state, item_count = self._item_count)]
+
+    def __setstate__(self, from_checkpoint):
+        # We define the iteration itself as a generator for ease of implementation.
+        # We could as well just have used an explicit state machine represented by class members.
         def _generator():
             # create and reset random generator
             random = Random(self._seed)
             if from_checkpoint is not None and from_checkpoint[0].random_state is not None:  # restore the shuffled_items array
                 random.setstate(from_checkpoint[0].random_state)
             skip_to_checkpoint = from_checkpoint[0].item_count if from_checkpoint is not None else 0
-            # loop over items, reshuffle before each pass
+            # main outer loop for infinite passes over items (reshuffle before each pass)
             while True:
                 # (re-)shuffle all items
                 self._random_state = random.getstate()  # remember random state before shuffling
@@ -132,19 +148,15 @@ class InfinitePermutationIterator:
                         next(shuffled_iterator)
                     self._item_count += skip_to_checkpoint
                     skip_to_checkpoint = 0  # only the first time
-                # loop over items
+                # main inner loop over items
                 for item in shuffled_iterator:
                     self._item_count += 1  # record how many items we have served from this pass over the items
                     yield item
         self._iterator = _generator()
-    
-    def __iter__(self):
-        return iter(self._iterator)
-    
-    def __next__(self):
-        return next(self._iterator)
 
-    def get_checkpoint(self):
+    # alternative checkpointing protocol:
+    # To reset to checkpoint, a new instance of this class is created (instead of just the inner _iterator).
+    def get_checkpoint(self):  # this is identical to getstate()
         return [Struct(random_state = self._random_state, item_count = self._item_count)]
     
     def iter_from_checkpoint(self, from_checkpoint):
@@ -305,11 +317,14 @@ for i in range(5):
     reader: Iterable[Any] = InfinitePermutationIterator(range(random.randrange(5,25)), seed=i)
     items0 = list(itertools.islice(reader, random.randrange(5,25)))
     print('items0', items0)
-    c = reader.get_checkpoint()
+    #c = reader.get_checkpoint()
+    c = reader.__getstate__()
     rng = random.randrange(5,25)
-    items1 = list(itertools.islice(reader, rng))
-    print('items1a', items1)
-    r2 = reader.iter_from_checkpoint(c)
-    items1r = list(itertools.islice(r2, rng))
-    print('items1b', items1r)
-    assert items1 == items1r
+    items1a = list(itertools.islice(reader, rng))
+    print('items1a', items1a)
+    #r2 = reader.iter_from_checkpoint(c)
+    #items1r = list(itertools.islice(r2, rng))
+    reader.__setstate__(c)
+    items1b = list(itertools.islice(reader, rng))
+    print('items1b', items1b)
+    assert items1a == items1b
