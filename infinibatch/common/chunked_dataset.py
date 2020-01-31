@@ -55,33 +55,32 @@ def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], fro
     """
     original_items = list(items)  # keep a local copy, since items is an iterator
 
-    current_checkpoint_state = Struct(random_state = None, item_count = 0) # from_checkpoint of ongoing iteration
+    current_checkpoint_state = Struct(random_state = None, item_count = 0)  # current checkpoint state
 
     def generator():
         # create and reset random generator
         random = Random(seed)
-        if from_checkpoint is not None and from_checkpoint[0].random_state is not None: # restore the shuffled_items array
+        if from_checkpoint is not None and from_checkpoint[0].random_state is not None:  # restore the shuffled_items array
             random.setstate(from_checkpoint[0].random_state)
-        # get first shuffled set
-        def _items_shuffled() -> Iterator[Any]: # helper to generate the next shuffled version of original_items
-            shuffled_items = original_items[:]
-            current_checkpoint_state.random_state = random.getstate() # remember random state before shuffling
-            current_checkpoint_state.item_count = 0
-            random.shuffle(shuffled_items)
-            return iter(shuffled_items)
-        shuffled_iterator = _items_shuffled()
-        # fast-forward if from_checkpoint given
-        if from_checkpoint is not None:
-            for i in range(from_checkpoint[0].item_count):
-                next(shuffled_iterator)
-            #itertools.islice(shuffled_iterator, from_checkpoint[0].item_count) # BUGBUG: This is not the same. Why?
-            current_checkpoint_state.item_count += from_checkpoint[0].item_count
-        # iterate infinitely with reshuffle after each pass
+        skip_to_checkpoint = from_checkpoint[0].item_count if from_checkpoint is not None else 0
+        # loop over items, reshuffle before each pass
         while True:
+            # (re-)shuffle all items
+            current_checkpoint_state.random_state = random.getstate()  # remember random state before shuffling
+            current_checkpoint_state.item_count   = 0
+            shuffled_items = original_items[:]
+            random.shuffle(shuffled_items)
+            shuffled_iterator = iter(shuffled_items)
+            # skip initial items when restarting from checkpoint
+            if skip_to_checkpoint:
+                for i in range(skip_to_checkpoint):
+                    next(shuffled_iterator)
+                current_checkpoint_state.item_count += skip_to_checkpoint
+                skip_to_checkpoint = 0  # only the first time
+            # loop over items
             for item in shuffled_iterator:
-                current_checkpoint_state.item_count += 1
+                current_checkpoint_state.item_count += 1  # record how many items we have served from this pass over the items
                 yield item
-            shuffled_iterator = _items_shuffled()
 
     iterator = generator()
     return CheckpointedIteratorWrapper( # wrap in a class that implements both iterator and checkpointing protocols
