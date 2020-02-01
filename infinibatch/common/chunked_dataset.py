@@ -150,7 +150,20 @@ class NativeIterator(_ICheckpointIterator):
 
 
 class _BufferedShuffleIterator(_ICheckpointIterator):
+    _input_iterator: Iterator[Any]
+    _buffer: List[Optional[Any]]
+    _random: Random
+    _generator: Iterator[Any]  # @TODO: Generator[Any] does not work here
+
     def __init__(self, input_iterator: _ICheckpointIterator, buffer_size: int, seed: int = 0):
+        """
+        Shuffles given iterable using a limited buffer.
+        
+        Arguments:
+        input_iterator -- input iterable over items to shuffle
+        buffer_size -- size of the buffer in number of items used for shuffling
+        seed -- random seed used for shuffling (or None)
+        """
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
@@ -193,10 +206,10 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
         self._input_iterator.__setstate__(nested_checkpoint)
         self._buffer = buffer
         self._random.setstate(random_state)
-        # @BUGBUG?: Does this handle the flush part? May require to recreate the generator.
+        # @TODO: Can we add a comment how the flush part is handled?
 
 
-class _IterableBufferedShuffler:  # @TODO: we should next replace this by _BufferedShuffleIterator above
+class _IterableBufferedShuffler_deleteme:  # @TODO: we should next replace this by _BufferedShuffleIterator above
     _iterable: Iterable[Any]
     _buffer_size: int
     _seed: Optional[int]
@@ -291,7 +304,7 @@ class IterableChunkedDataset:
             buffered_shuffle_iterator_seed = self._seed
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
-            samples = _IterableBufferedShuffler(samples, self._buffer_size, buffered_shuffle_iterator_seed)
+            samples = _BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
         if self._transform is not None:
             samples = (self._transform(item) for item in samples)
         return iter(samples)
