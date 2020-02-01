@@ -57,10 +57,12 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
     Arguments:
     iterator -- input iterator
     seed -- random seed used for shuffling (or None)
+    shuffle -- set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
     """
     # constructor arguments
     _original_items: List[Any]  # note: in this case, the source iterator is not checkpointable, hence we must instead keep a full copy
     _seed: Optional[int]
+    _shuffle: bool
 
     # output iterator that generates our output sequence
     _generator: Iterator[Any]
@@ -69,9 +71,10 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
     _random_state: Any
     _item_count: int
 
-    def __init__(self, items: Iterator[Any], seed: Optional[int]):
+    def __init__(self, items: Iterator[Any], seed: Optional[int] = None, shuffle: bool = True):
         # keep arguments for iter_from_checkpoint
         self._original_items = list(items)  # keep a local copy, since items is an iterator
+        self._shuffle = shuffle
         self._seed = seed
         self.__setstate__(from_checkpoint=None)
 
@@ -108,7 +111,8 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
                 self._random_state = random.getstate()  # remember random state before shuffling
                 self._item_count   = 0
                 shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use __setstate__(from_checkpoint.nested_state) on it
-                random.shuffle(shuffled_items)
+                if (self._shuffle):
+                    random.shuffle(shuffled_items)
                 shuffled_iterator = iter(shuffled_items)
                 # skip initial items when restarting from checkpoint
                 if skip_to_checkpoint:  # @TODO: find a way to abstract this more, so that we can plug it into the 'for' statement directly
@@ -268,7 +272,6 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
 
 # @TODO: Support non-zipped files.
 # @TODO: Support index files?
-# @TODO: Implement checkpointing. Currently the checkpointing test fails.
 class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an iterator
     _chunk_file_paths: Union[str, Iterable[str]]
     _shuffle: bool
@@ -313,11 +316,7 @@ class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an ite
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint):
-        if not self._shuffle:
-            #chunks = NativeIterator(cycle(self._chunk_file_paths))
-            chunks = NativeIterator(list(self._chunk_file_paths) * 100)  # @TODO: temporary workaround to be able to develop
-        else:
-            chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
+        chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed, shuffle=self._shuffle)
         if self._num_instances > 1:
             chunks = islice(chunks, self._instance_rank, None, self._num_instances)   # @TODO: make checkpointable. Tests pass, by luck I think.
         samples = _ChunkedDataIterator(chunks)

@@ -182,7 +182,7 @@ class TestBufferedShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
-class TestIterableChunkedDataset(TestBase):
+class TestChunkedDatasetIterator(TestBase):
     def test_no_shuffle(self):
         items = list(itertools.islice(ChunkedDatasetIterator(self.data_dir, shuffle=False), len(self.flattened_test_data)))
         self.assertListEqual(items, self.flattened_test_data)
@@ -208,21 +208,18 @@ class TestIterableChunkedDataset(TestBase):
 
     def test_checkpointing(self):
         random = Random()
-        for _ in range(20):
+        for i in range(20):
             first_length = random.randrange(11,21)
             extra_length = random.randrange(11,21)
-            dataset = ChunkedDatasetIterator(self.data_dir, shuffle=False, num_instances=2, instance_rank=0)
+            dataset = ChunkedDatasetIterator(self.data_dir, shuffle=(i % 2 == 0), seed=i, num_instances=2, instance_rank=0)
             for _ in range(first_length):
                 next(dataset)
             checkpoint = dataset.__getstate__()
             items0 = list(itertools.islice(dataset, extra_length))
-            #print(items0)
             dataset.__setstate__(checkpoint)
             items1 = list(itertools.islice(dataset, extra_length))
-            #print(items1)
             self.assertListEqual(items0, items1)
 
 
 if __name__ == '__main__':
     unittest.main()
-    #unittest.main(TestChunkedDataIterator())
