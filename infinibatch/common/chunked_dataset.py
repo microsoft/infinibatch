@@ -48,7 +48,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
     _seed: Optional[int]
 
     # output iterator that generates our output sequence
-    _iterator: Iterator[Any]
+    _generator: Iterator[Any]
 
     # iteration state. This is returned when requesting the checkpoint, and restored when resetting to checkpoint.
     _random_state: Any
@@ -66,7 +66,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
         return self
     
     def __next__(self):
-        return next(self._iterator)
+        return next(self._generator)
 
     # implementation of Checkpointing protocol:
     # Names are inspired by pickle https://docs.python.org/2/library/pickle.html.
@@ -82,7 +82,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
         self._item_count   = from_checkpoint.item_count   if from_checkpoint else 0
         # We define the iteration itself as a generator for ease of implementation.
         # We could as well just have used an explicit state machine represented by class members.
-        def _generator():
+        def _create_generator():
             # create and reset random generator
             random = Random(self._seed)
             if self._random_state is not None:  # restore the random generator's state
@@ -106,7 +106,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
                 for item in shuffled_iterator:
                     self._item_count += 1  # record how many items we have served from this pass over the items
                     yield item
-        self._iterator = _generator()
+        self._generator = _create_generator()
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
@@ -152,7 +152,7 @@ class NativeIterator(_ICheckpointIterator):
 class BufferedShuffleIterator(_ICheckpointIterator):
     def __init__(self, input_iterator: _ICheckpointIterator, buffer_size: int, seed: int = 0):
         self._input_iterator = input_iterator
-        self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?
+        self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
         self._generator = self._create_generator()  # @TODO: call __setstate__ instead
 
@@ -181,20 +181,22 @@ class BufferedShuffleIterator(_ICheckpointIterator):
             yield self._buffer.pop()
 
     def __getstate__(self):
-        previous_checkpoint = self._input_iterator.__getstate__()
-        local_checkpoint = [copy.deepcopy(self._buffer), self._random.getstate()]
-        previous_checkpoint.append(local_checkpoint)
-        return previous_checkpoint
+        #previous_checkpoint = self._input_iterator.__getstate__()  # @TODO: let's not assume that the underlying iterator's checkpoint is a list
+        #local_checkpoint = [copy.deepcopy(self._buffer), self._random.getstate()]
+        #previous_checkpoint.append(local_checkpoint)
+        return (self._input_iterator.__getstate__(),
+                (copy.deepcopy(self._buffer),
+                 self._random.getstate()))
 
     def __setstate__(self, checkpoint):
-        local_checkpoint = checkpoint[-1]
-        checkpoint = checkpoint[:-1]
-        self._input_iterator.__setstate__(checkpoint)
+        self._input_iterator.__setstate__(checkpoint[0])
+        local_checkpoint = checkpoint[1]
         self._buffer = local_checkpoint[0]
         self._random.setstate(local_checkpoint[1])  # @TODO: better recreate the generator
+        # @BUGBUG?: Does this handle the flush part?
 
 
-class _IterableBufferedShuffler:
+class _IterableBufferedShuffler:  # @TODO: we should next replace this by BufferedShuffleIterator above
     _iterable: Iterable[Any]
     _buffer_size: int
     _seed: Optional[int]
@@ -281,7 +283,7 @@ class IterableChunkedDataset:
         else:
             chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
-            chunks = itertools.islice(chunks, start=self._instance_rank, stop=None, step=self._num_instances)
+            chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
         
         samples = _IterableChunkedData(chunks)
         if self._shuffle:

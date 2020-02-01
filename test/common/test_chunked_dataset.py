@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from typing import Iterable, Iterator, Any
 
-from infinibatch.common.chunked_dataset import IterableChunkedDataset, _IterableInfinitePermutation, _IterableChunkedData, _IterableBufferedShuffler
+from infinibatch.common.chunked_dataset import IterableChunkedDataset, _InfinitePermutationIterator, _IterableChunkedData, _IterableBufferedShuffler
 
 
 class TestBase(unittest.TestCase):
@@ -62,17 +62,18 @@ class TestBase(unittest.TestCase):
 class TestInfinitePermutationIterator(TestBase):
     def test_repeat_once(self):
         # This tests that two consecutive iterations through the test data yields differently ordered sequences.
-        reader: Iterator[Any] = iter(_IterableInfinitePermutation(self.flattened_test_data, 42))
+        reader: Iterator[Any] = iter(_InfinitePermutationIterator(self.flattened_test_data, 42))
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
         self.assertTrue(any(item0 != item1 for item0, item1 in zip(items0, items1)))
 
     def test_reiter_once(self):
-        # This differs from test_repeat_once in that we don't call iter() before passing to islice().
-        # Hence, `reader` is an iterable, and iterating over it twice should yield the *same* sequence.
-        reader: Iterable[Any] = _IterableInfinitePermutation(self.flattened_test_data, 42)
+        # This differs from test_repeat_once in that we use checkpoints.
+        reader: Iterable[Any] = _InfinitePermutationIterator(self.flattened_test_data, 42)
+        checkpoint = reader.__getstate__()
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
+        reader.__setstate__(checkpoint)
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
         self.assertSequenceEqual(items0, items1)
