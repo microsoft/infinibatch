@@ -1,8 +1,10 @@
 import gzip
 import itertools
+from itertools import islice
 import os
 from random import Random
-from typing import Union, Iterable, Iterator, List, Any, Callable, Optional
+from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Generator
+import copy
 
 
 # simple mechanism to create a class and class instance on the fly
@@ -16,76 +18,21 @@ class Record:
     # @TODO: make this immutable, rename back to Record, and get rid of copy(). Mutability currently only used in infinite_permutation_iterator()
 
 
-# wrapper around standard Python Iterators
-# This class itself has no state. Instead, state is encapsulated by three lambdas that are passed in.
-# Implements iterator protocol, i.e. next() and iter(), but also get_checkpoint() and iter_from_checkpoint().
-class CheckpointedIteratorWrapper():
-    _next: Callable[[], Any]
-    get_checkpoint:       Callable[[], List[Any]]       # these are callable member functions
-    iter_from_checkpoint: Callable[[List[Any]], None]
-
-    def __init__(self, next: Callable[[], Any], get_checkpoint: Callable[[], List[Any]], iter_from_checkpoint: Callable[[List[Any]], None]):
-        self.get_checkpoint       = get_checkpoint        # these are now callable members
-        self.iter_from_checkpoint = iter_from_checkpoint
-        self._next                = next                  # does not work with __next__, which is special   
-    
+class _ICheckpointIterator:  # @TODO: Can rename away the I- once done. This makes it easier during development
     def __next__(self):
-        return self._next()
-    
+        raise NotImplementedError()
+
     def __iter__(self):
         return self
 
+    def __getstate__(self):
+        raise NotImplementedError()
 
-# NOTE: after many changes below, this function may no longer run without a few fixes
-def infinite_permutation_iterator(items: Iterator[Any], seed: Optional[int], from_checkpoint: Optional[Any] = None):
-    """
-    Infinitely generates permutations of the items in the given iterable.
-
-    Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by _IterableChunkedData.
-
-    Arguments:
-    iterator -- input iterator
-    seed -- random seed used for shuffling (or None)
-    from_checkpoint -- checkpoint info obtained by get_checkpoint(), will advance to this point
-    """
-    original_items = list(items)  # keep a local copy, since items is an iterator
-
-    current_checkpoint_state = Record(random_state = None, item_count = 0)  # current checkpoint state
-
-    def generator():
-        # create and reset random generator
-        random = Random(seed)
-        if from_checkpoint is not None and from_checkpoint.random_state is not None:  # restore the shuffled_items array
-            random.setstate(from_checkpoint.random_state)
-        skip_to_checkpoint = from_checkpoint.item_count if from_checkpoint is not None else 0
-        # loop over items, reshuffle before each pass
-        while True:
-            # (re-)shuffle all items
-            current_checkpoint_state.random_state = random.getstate()  # remember random state before shuffling
-            current_checkpoint_state.item_count   = 0
-            shuffled_items = original_items[:]
-            random.shuffle(shuffled_items)
-            shuffled_iterator = iter(shuffled_items)
-            # skip initial items when restarting from checkpoint
-            if skip_to_checkpoint:
-                for i in range(skip_to_checkpoint):
-                    next(shuffled_iterator)
-                current_checkpoint_state.item_count += skip_to_checkpoint
-                skip_to_checkpoint = 0  # only the first time
-            # loop over items
-            for item in shuffled_iterator:
-                current_checkpoint_state.item_count += 1  # record how many items we have served from this pass over the items
-                yield item
-
-    iterator = generator()
-    return CheckpointedIteratorWrapper( # wrap in a class that implements both iterator and checkpointing protocols
-            next                 = lambda: next(iterator),
-            get_checkpoint       = lambda: current_checkpoint_state.copy(),
-            iter_from_checkpoint = lambda from_checkpoint: infinite_permutation_iterator(original_items, seed, from_checkpoint))
+    def __setstate__(self, checkpoint):
+        raise NotImplementedError()
 
 
-class InfinitePermutationIterator:  # ...how to say in Python: "implements interfaces Iterator[Any], Checkpointing"
+class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Python: "implements interfaces Iterator[Any], Checkpointing"
     """
     Infinitely generates permutations of the items in the given iterable.
 
@@ -161,43 +108,6 @@ class InfinitePermutationIterator:  # ...how to say in Python: "implements inter
                     yield item
         self._iterator = _generator()
 
-    # alternative Checkpointing protocol:
-    # To reset to checkpoint, a new instance of this class is created (instead of just the inner _iterator).
-    def get_checkpoint(self):
-        return self.__getstate__()
-    
-    def iter_from_checkpoint(self, from_checkpoint):
-        i = InfinitePermutationIterator(self._original_items, self._seed)
-        i.__setstate__(from_checkpoint)
-        return i
-
-
-class _IterableInfinitePermutation:
-    _iterable: Iterable[Any]
-    _seed: Optional[int]
-
-    def __init__(self, iterable: Iterable[Any], seed: Optional[int]):
-        """
-        Infinitely generates permutations of the items in the given iterable.
-
-        Unlike most classes here, this one loads all items into RAM. For example, this is used
-        for randomizing the pathnmaes of data blocks read by _IterableChunkedData.
-
-        Arguments:
-        iterable -- input iterable
-        seed -- random seed used for shuffling (or None)
-        """
-        self._iterable = iterable
-        self._seed = seed
-
-    def __iter__(self):
-        random = Random(self._seed)
-        items = list(self._iterable)
-        while True:
-            random.shuffle(items)
-            for item in items:
-                yield item
-
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 # @TODO: Support non-gzipped files as well
@@ -218,6 +128,70 @@ class _IterableChunkedData:
                 data = f.read().splitlines()
             for item in data:
                 yield item
+
+
+class NativeIterator(_ICheckpointIterator):
+    def __init__(self, iterator: Iterator[Any]):
+        self._iterator = iterator
+        self._consumed_items = 0
+
+    def __next__(self):
+        item = next(self._iterator)
+        self._consumed_items += 1
+        return item
+
+    def __getstate__(self) -> List:
+        return [self._consumed_items]
+
+    def __setstate__(self, checkpoint):
+        self._consumed_items = checkpoint[-1]
+        for _ in range(self._consumed_items):
+            next(self._iterator)
+
+
+class BufferedShuffleIterator(_ICheckpointIterator):
+    def __init__(self, input_iterator: _ICheckpointIterator, buffer_size: int, seed: int = 0):
+        self._input_iterator = input_iterator
+        self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?
+        self._random = Random(seed)
+        self._generator = self._create_generator()  # @TODO: call __setstate__ instead
+
+    def __next__(self):
+        return next(self._generator)
+
+    def _create_generator(self):
+        # shuffle data with a buffer:
+        # this is similar to what the Fisher-Yates shuffle does,
+        # but modified to run with a constant-size buffer
+        # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+        # this was inspired by an algorithm implemented in Kaldi
+        # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
+        for item in self._input_iterator:
+            index = self._random.randrange(0, len(self._buffer))
+            result = None
+            if self._buffer[index] is not None:
+                result = self._buffer[index]
+            self._buffer[index] = item
+            # only yield value once buffer is updated to allow for correct checkpointing!
+            if result is not None:
+                yield result
+
+        # flush buffer
+        while self._buffer:
+            yield self._buffer.pop()
+
+    def __getstate__(self):
+        previous_checkpoint = self._input_iterator.__getstate__()
+        local_checkpoint = [copy.deepcopy(self._buffer), self._random.getstate()]
+        previous_checkpoint.append(local_checkpoint)
+        return previous_checkpoint
+
+    def __setstate__(self, checkpoint):
+        local_checkpoint = checkpoint[-1]
+        checkpoint = checkpoint[:-1]
+        self._input_iterator.__setstate__(checkpoint)
+        self._buffer = local_checkpoint[0]
+        self._random.setstate(local_checkpoint[1])  # @TODO: better recreate the generator
 
 
 class _IterableBufferedShuffler:
@@ -305,9 +279,9 @@ class IterableChunkedDataset:
         if not self._shuffle:
             chunks = itertools.cycle(self._chunk_file_paths)
         else:
-            chunks = infinite_permutation_iterator(self._chunk_file_paths, self._seed)
+            chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
-            chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
+            chunks = itertools.islice(chunks, start=self._instance_rank, stop=None, step=self._num_instances)
         
         samples = _IterableChunkedData(chunks)
         if self._shuffle:
@@ -320,26 +294,48 @@ class IterableChunkedDataset:
             samples = (self._transform(item) for item in samples)
         return iter(samples)
 
-# TODO: make this a real test
-random = Random()
-for i in range(20):
-    # random sequence lengths to for testing different configurations
-    test_source_length        = random.randrange(5,25)
-    test_first_output_length  = random.randrange(5,25)
-    test_second_output_length = random.randrange(5,25)
-    # source
-    test_source = range(test_source_length)
-    reader: Iterable[Any] = InfinitePermutationIterator(test_source, seed=i)
-    # fetch a first sequence
-    items0 = list(itertools.islice(reader, test_first_output_length))
-    print('items0', items0)
-    # fetch a second sequence
-    checkpoint = reader.__getstate__()
-    items1a = list(itertools.islice(reader, test_second_output_length))
-    print('items1a', items1a)
-    # fetch that second sequence again via checkpointing
-    reader.__setstate__(checkpoint)
-    items1b = list(itertools.islice(reader, test_second_output_length))
-    print('items1b', items1b)
-    # must be the same
-    assert items1a == items1b
+
+
+if __name__ == '__main__':
+    data_size = 10**5
+
+    data = NativeIterator(iter(range(data_size)))
+    shuffled_data = BufferedShuffleIterator(data, 100)
+    not_checkpointed = list(shuffled_data)
+
+    data = NativeIterator(iter(range(data_size)))
+    shuffled_data = BufferedShuffleIterator(data, 100)
+    checkpointed = list(islice(shuffled_data, 10000-10))
+
+    checkpoint = shuffled_data.__getstate__()
+    data = NativeIterator(iter(range(data_size)))
+    shuffled_data = BufferedShuffleIterator(data, 100, 42)
+    shuffled_data.__setstate__(checkpoint)
+    checkpointed += list(shuffled_data)
+
+    assert checkpointed == not_checkpointed
+    print("passed")
+
+    # TODO: make this a real test
+    random = Random()
+    for i in range(20):
+        # random sequence lengths to for testing different configurations
+        test_source_length        = random.randrange(5,25)
+        test_first_output_length  = random.randrange(5,25)
+        test_second_output_length = random.randrange(5,25)
+        # source
+        test_source = range(test_source_length)
+        reader = _InfinitePermutationIterator(test_source, seed=i)
+        # fetch a first sequence
+        items0 = list(itertools.islice(reader, test_first_output_length))
+        print('items0', items0)
+        # fetch a second sequence
+        checkpoint = reader.__getstate__()
+        items1a = list(itertools.islice(reader, test_second_output_length))
+        print('items1a', items1a)
+        # fetch that second sequence again via checkpointing
+        reader.__setstate__(checkpoint)
+        items1b = list(itertools.islice(reader, test_second_output_length))
+        print('items1b', items1b)
+        # must be the same
+        assert items1a == items1b
