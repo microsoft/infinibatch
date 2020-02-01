@@ -124,57 +124,51 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
 # @TODO: Support non-gzipped files as well
 class _ChunkedDataIterator(_ICheckpointIterator):
     _chunk_file_paths: Iterable[str]
+
     _iterator: Iterator[Any]
+
+    _files_read: int
+    _lines_read_in_last_file: int
 
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
-        Reads data from chunks.
+        Reads data (text lines) from chunk files.
 
-        Arguments:
-        chunk_file_paths -- iterable of paths to chunk files
+        Args:
+            chunk_file_paths: iterable of paths to chunk files   --@BUGBUG: Must use a checkpointable type
         """
         self._chunk_file_paths = chunk_file_paths
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        self._files_read              = checkpoint.files_read              if checkpoint else 0
+        self._lines_read_in_last_file = checkpoint.lines_read_in_last_file if checkpoint else 0
         def _generate():
-            chunk_file_paths = iter(self._chunk_file_paths)  # note: This is an iterable, and therefore restartable.
-            # @TODO: advance based on checkpoint
+            chunk_file_paths = iter(self._chunk_file_paths)  # @BUGBUG: This assumes that this is restartable, which it is not. Really should use __setstate__ here as well
+            _advance_iterator(chunk_file_paths, self._files_read)  # @TODO: If source is a cycle, then this may not be cheap
+            skip_to_checkpoint = self._lines_read_in_last_file
+            self._lines_read_in_last_file = 0
+            # main loop over chunk files
             for chunk_file_path in chunk_file_paths:
-                print("Reading chunk file", chunk_file_path, file=sys.stderr)
+                #print("Reading chunk file", chunk_file_path, file=sys.stderr)
                 with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
                     data = iter(f.read().splitlines())
-                # @TODO: advance based on checkpoint
+                if skip_to_checkpoint:
+                    self._lines_read_in_last_file += _advance_iterator(data, skip_to_checkpoint)
+                    skip_to_checkpoint = 0
+                # main loop over lines
                 for item in data:
+                    self._lines_read_in_last_file += 1
                     yield item
         self._iterator = _generate()
     
-    def __getstate__(self):
-        raise NotImplementedError()  # @TODO: finish this
+    def __getstate__(self) -> NamedTuple:
+        return namedtuple_from(
+            files_read              = self._files_read,
+            lines_read_in_last_file = self._lines_read_in_last_file)
 
     def __next__(self):
         return next(self._iterator)
-
-
-# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-# @TODO: Support non-gzipped files as well
-class _IterableChunkedData_deleteme:  # @TODO: to be supplanted by _ChunkedDataIterator above
-    _chunk_file_paths: Iterable[str]
-    def __init__(self, chunk_file_paths: Iterable[str]):
-        """
-        Reads data from chunks.
-
-        Arguments:
-        chunk_file_paths -- iterable of paths to chunk files
-        """
-        self._chunk_file_paths = chunk_file_paths
-
-    def __iter__(self):
-        for chunk_file_path in self._chunk_file_paths:
-            with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
-                data = f.read().splitlines()
-            for item in data:
-                yield item
 
 
 # @TODO: Can we have one that also takes an input iterator?
@@ -268,6 +262,7 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
 
 # @TODO: Support non-zipped files.
 # @TODO: Support index files?
+# @TODO: Implement checkpointing. Currently the checkpointing test fails.
 class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an iterator
     _chunk_file_paths: Union[str, Iterable[str]]
     _shuffle: bool

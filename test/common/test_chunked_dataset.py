@@ -91,15 +91,15 @@ class TestInfinitePermutationIterator(TestBase):
             reader = _InfinitePermutationIterator(test_source, seed=i)
             # fetch a first sequence
             items0 = list(itertools.islice(reader, test_first_output_length))
-            print('items0', items0)
+            #print('items0', items0)
             # fetch a second sequence
             checkpoint = reader.__getstate__()
             items1a = list(itertools.islice(reader, test_second_output_length))
-            print('items1a', items1a)
+            #print('items1a', items1a)
             # fetch that second sequence again via checkpointing
             reader.__setstate__(checkpoint)
             items1b = list(itertools.islice(reader, test_second_output_length))
-            print('items1b', items1b)
+            #print('items1b', items1b)
             # must be the same
             self.assertTrue(items1a == items1b)
 
@@ -151,6 +151,21 @@ class TestChunkedDataIterator(TestBase):
         shutil.rmtree(lf_dir)
         shutil.rmtree(crlf_dir)
 
+    def test_checkpointing(self):
+        chunk_file_paths = [os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz')]
+        # @BUGBUG: Need to use itertools.cycle(chunk_file_paths) ^^ here, but that's not checkpointable.
+        #          So for now we repeat it a few times.
+        chunk_file_paths *= 50
+        random = Random()
+        for _ in range(20):
+            test_length = random.randrange(11,313)
+            dataset = _ChunkedDataIterator(chunk_file_paths)
+            checkpoint = dataset.__getstate__()
+            items0 = list(itertools.islice(dataset, test_length))
+            dataset.__setstate__(checkpoint)
+            items1 = list(itertools.islice(dataset, test_length))
+            self.assertListEqual(items0, items1)
+
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
@@ -185,6 +200,14 @@ class TestIterableChunkedDataset(TestBase):
         items0 = list(itertools.islice(dataset0, len(self.test_data[0]) + len(self.test_data[2])))
         items1 = list(itertools.islice(dataset1, len(self.test_data[1]) + len(self.test_data[3])))
         self.assertMultisetEqual(set(items0 + items1), self.flattened_test_data)
+
+    def test_checkpointing(self):
+        dataset = ChunkedDatasetIterator(self.data_dir, shuffle=False, num_instances=2, instance_rank=0)
+        checkpoint = dataset.__getstate__()
+        items0 = list(itertools.islice(dataset, len(self.test_data[0]) + len(self.test_data[2])))
+        dataset.__setstate__(checkpoint)
+        items1 = list(itertools.islice(dataset, len(self.test_data[1]) + len(self.test_data[3])))
+        self.assertListEqual(items0, items1)
 
 
 if __name__ == '__main__':
