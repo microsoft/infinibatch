@@ -1,21 +1,29 @@
 import gzip
-import itertools
-from itertools import islice
+from itertools import islice, cycle
 import os
 from random import Random
 from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Generator
 import copy
 
 
-# simple mechanism to create a class and class instance on the fly
-# e.g. x = Record(a=13, b=42) then use x.a and x.b
-# This mimics C#'s named tuple types (and is very different from Python's namedtuple which creates a type not class instances).
-class Record:
-    def __init__(self, **args_dict):
-        self.__dict__.update(args_dict)
-    def copy(self):
-        return Record(**dict(self.__dict__.items()))
-    # @TODO: make this immutable, rename back to Record, and get rid of copy(). Mutability currently only used in infinite_permutation_iterator()
+def namedtuple_from(**members):
+    """
+    Creates a record of variables, which are then accessed by . syntax.
+    Wraps namedtuple type creation and instantiation into a single call.
+
+    Example:
+        >>> r = namedtuple_from(x = 13, y = 42)
+        >>> r.x
+            13
+
+    Args:
+        members: values that the record is to contain
+
+    Returns:
+        A singleton named tuple that has all passed kw args as immutable class members.
+    """
+    from collections import namedtuple
+    return namedtuple("namedtuple_from", members.keys())(**members)
 
 
 class _ICheckpointIterator:  # @TODO: Can rename away the I- once done. This makes it easier during development
@@ -72,9 +80,8 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
     # Names are inspired by pickle https://docs.python.org/2/library/pickle.html.
     # But they look ugly when called from user code. We can use the non-__ names, like Random.
     def __getstate__(self):
-        return Record(random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
-                      item_count   = self._item_count,    # how many items have already been served from the current shuffling
-                      nested_state = None)                # state of underlying iterator (not present in this example)
+        return namedtuple_from(random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
+                      item_count   = self._item_count)    # how many items have already been served from the current shuffling
 
     def __setstate__(self, from_checkpoint):
         # set iteration state. Do this outside the generator below in case __getstate__() is called before ever iterating
@@ -82,7 +89,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
         self._item_count   = from_checkpoint.item_count   if from_checkpoint else 0
         # We define the iteration itself as a generator for ease of implementation.
         # We could as well just have used an explicit state machine represented by class members.
-        def _create_generator():
+        def _generate():
             # create and reset random generator
             random = Random(self._seed)
             if self._random_state is not None:  # restore the random generator's state
@@ -106,7 +113,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
                 for item in shuffled_iterator:
                     self._item_count += 1  # record how many items we have served from this pass over the items
                     yield item
-        self._generator = _create_generator()
+        self._generator = _generate()
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
@@ -153,7 +160,7 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
     _input_iterator: Iterator[Any]
     _buffer: List[Optional[Any]]
     _random: Random
-    _generator: Iterator[Any]  # @TODO: Generator[Any] does not work here
+    _generator: Iterator[Any]
 
     def __init__(self, input_iterator: _ICheckpointIterator, buffer_size: int, seed: int = 0):
         """
@@ -167,12 +174,12 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
-        self._generator = self._create_generator()  # @TODO: centralize this in __setstate__
+        self._generator = self._generate()  # @TODO: centralize this in __setstate__
 
     def __next__(self):
         return next(self._generator)
 
-    def _create_generator(self):
+    def _generate(self):
         # shuffle data with a buffer:
         # this is similar to what the Fisher-Yates shuffle does,
         # but modified to run with a constant-size buffer
@@ -196,56 +203,16 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
                 yield item
 
     def __getstate__(self):
-        return (self._input_iterator.__getstate__(),  # nested_checkpoint
-                (copy.deepcopy(self._buffer),         # buffer
-                 self._random.getstate()))            # random_state
+        return namedtuple_from(
+            nested_checkpoint = self._input_iterator.__getstate__(),
+            buffer            = copy.deepcopy(self._buffer),
+            random_state      = self._random.getstate())
 
     def __setstate__(self, checkpoint):
-        nested_checkpoint, local_checkpoint = checkpoint
-        buffer, random_state = local_checkpoint
-        self._input_iterator.__setstate__(nested_checkpoint)
-        self._buffer = buffer
-        self._random.setstate(random_state)
+        self._input_iterator.__setstate__(checkpoint.nested_checkpoint)
+        self._buffer = checkpoint.buffer
+        self._random.setstate(checkpoint.random_state)
         # @TODO: Can we add a comment how the flush part is handled?
-
-
-class _IterableBufferedShuffler_deleteme:  # @TODO: we should next replace this by _BufferedShuffleIterator above
-    _iterable: Iterable[Any]
-    _buffer_size: int
-    _seed: Optional[int]
-
-    def __init__(self, iterable: Iterable[Any], buffer_size: int, seed: Optional[int]):
-        """
-        Shuffles given iterable using a buffer.
-        
-        Arguments:
-        iterable -- input iterable over items to shuffle
-        buffer_size -- size of the buffer in number of items used for shuffling
-        seed -- random seed used for shuffling (or None)
-        """
-        self._iterable = iterable
-        self._buffer_size = buffer_size
-        self._seed = seed
-
-    def __iter__(self):
-        # shuffle data with a buffer:
-        # this is similar to what the Fisher-Yates shuffle does,
-        # but modified to run with a constant-size buffer
-        # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-        # this was inspired by an algorithm implemented in Kaldi
-        # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
-        random = Random(self._seed)
-        buffer = [None for _ in range(self._buffer_size)]
-        for item in self._iterable:
-            index = random.randrange(0, len(buffer))
-            if buffer[index] is not None:
-                yield buffer[index]
-            buffer[index] = item
-
-        # flush buffer
-        for item in buffer:
-            if item is not None:
-                yield item
 
 
 # @TODO: Support non-zipped files.
@@ -292,11 +259,11 @@ class IterableChunkedDataset:
 
     def __iter__(self):
         if not self._shuffle:
-            chunks = itertools.cycle(self._chunk_file_paths)
+            chunks = cycle(self._chunk_file_paths)
         else:
             chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
-            chunks = itertools.islice(chunks, self._instance_rank, None, self._num_instances)
+            chunks = islice(chunks, self._instance_rank, None, self._num_instances)
         
         samples = _IterableChunkedData(chunks)
         if self._shuffle:
@@ -342,15 +309,15 @@ if __name__ == '__main__':
         test_source = range(test_source_length)
         reader = _InfinitePermutationIterator(test_source, seed=i)
         # fetch a first sequence
-        items0 = list(itertools.islice(reader, test_first_output_length))
+        items0 = list(islice(reader, test_first_output_length))
         print('items0', items0)
         # fetch a second sequence
         checkpoint = reader.__getstate__()
-        items1a = list(itertools.islice(reader, test_second_output_length))
+        items1a = list(islice(reader, test_second_output_length))
         print('items1a', items1a)
         # fetch that second sequence again via checkpointing
         reader.__setstate__(checkpoint)
-        items1b = list(itertools.islice(reader, test_second_output_length))
+        items1b = list(islice(reader, test_second_output_length))
         print('items1b', items1b)
         # must be the same
         assert items1a == items1b
