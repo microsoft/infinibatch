@@ -1,8 +1,8 @@
 import gzip
 from itertools import islice, cycle
-import os
+import os, sys
 from random import Random
-from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Generator
+from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Generator, NamedTuple
 import copy
 
 
@@ -25,6 +25,12 @@ def namedtuple_from(**members):
     from collections import namedtuple
     return namedtuple("namedtuple_from", members.keys())(**members)
 
+def _advance_iterator(iter: Iterator[Any], n: int):
+    """Little helper to advance an iterator by n items"""
+    for _ in range(n):
+        next(iter)
+    return n
+
 
 class _ICheckpointIterator:  # @TODO: Can rename away the I- once done. This makes it easier during development
     def __next__(self):
@@ -45,7 +51,7 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
     Infinitely generates permutations of the items in the given iterable.
 
     Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by _IterableChunkedData.
+    for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
 
     Arguments:
     iterator -- input iterator
@@ -79,11 +85,11 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
     # implementation of Checkpointing protocol:
     # Names are inspired by pickle https://docs.python.org/2/library/pickle.html.
     # But they look ugly when called from user code. We can use the non-__ names, like Random.
-    def __getstate__(self):
+    def __getstate__(self) -> NamedTuple:
         return namedtuple_from(random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
                       item_count   = self._item_count)    # how many items have already been served from the current shuffling
 
-    def __setstate__(self, from_checkpoint):
+    def __setstate__(self, from_checkpoint: Optional[NamedTuple]):
         # set iteration state. Do this outside the generator below in case __getstate__() is called before ever iterating
         self._random_state = from_checkpoint.random_state if from_checkpoint else None
         self._item_count   = from_checkpoint.item_count   if from_checkpoint else 0
@@ -104,10 +110,8 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
                 random.shuffle(shuffled_items)
                 shuffled_iterator = iter(shuffled_items)
                 # skip initial items when restarting from checkpoint
-                if skip_to_checkpoint:
-                    for i in range(skip_to_checkpoint):
-                        next(shuffled_iterator)
-                    self._item_count += skip_to_checkpoint
+                if skip_to_checkpoint:  # @TODO: find a way to abstract this more, so that we can plug it into the 'for' statement directly
+                    self._item_count += _advance_iterator(shuffled_iterator, skip_to_checkpoint)
                     skip_to_checkpoint = 0  # done skipping
                 # main inner loop over items
                 for item in shuffled_iterator:
@@ -118,7 +122,43 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 # @TODO: Support non-gzipped files as well
-class _IterableChunkedData:
+class _ChunkedDataIterator(_ICheckpointIterator):
+    _chunk_file_paths: Iterable[str]
+    _iterator: Iterator[Any]
+
+    def __init__(self, chunk_file_paths: Iterable[str]):
+        """
+        Reads data from chunks.
+
+        Arguments:
+        chunk_file_paths -- iterable of paths to chunk files
+        """
+        self._chunk_file_paths = chunk_file_paths
+        self.__setstate__(None)
+    
+    def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        def _generate():
+            chunk_file_paths = iter(self._chunk_file_paths)  # note: This is an iterable, and therefore restartable.
+            # @TODO: advance based on checkpoint
+            for chunk_file_path in chunk_file_paths:
+                print("Reading chunk file", chunk_file_path, file=sys.stderr)
+                with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
+                    data = iter(f.read().splitlines())
+                # @TODO: advance based on checkpoint
+                for item in data:
+                    yield item
+        self._iterator = _generate()
+    
+    def __getstate__(self):
+        raise NotImplementedError()  # @TODO: finish this
+
+    def __next__(self):
+        return next(self._iterator)
+
+
+# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
+# @TODO: Support non-gzipped files as well
+class _IterableChunkedData_deleteme:  # @TODO: to be supplanted by _ChunkedDataIterator above
     _chunk_file_paths: Iterable[str]
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
@@ -137,23 +177,34 @@ class _IterableChunkedData:
                 yield item
 
 
+# @TODO: Can we have one that also takes an input iterator?
+#        Then getstate() can inquire that one, and remember how often we have
+#        advanced since the last call to getstate(). Upon setstate(), we'd
+#        setstate() in the input iterator and then advance only the remaining few.
 class NativeIterator(_ICheckpointIterator):
+    """
+    Simple checkpointable wrapper around native Python iterators.
+    This version just replays the iterator all the way to the checkpoint, which will
+    make it inefficient for some important use cases.
+    """
+    _iterator: Iterator[Any]
+    _consumed_items: int
+
     def __init__(self, iterator: Iterator[Any]):
         self._iterator = iterator
-        self._consumed_items = 0
+        self.__setstate__(None)
 
     def __next__(self):
         item = next(self._iterator)
         self._consumed_items += 1
         return item
 
-    def __getstate__(self) -> List:
-        return [self._consumed_items]
+    def __getstate__(self) -> NamedTuple:
+        return namedtuple_from(
+            consumed_items = self._consumed_items)
 
-    def __setstate__(self, checkpoint):
-        self._consumed_items = checkpoint[-1]
-        for _ in range(self._consumed_items):
-            next(self._iterator)
+    def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint else 0
 
 
 class _BufferedShuffleIterator(_ICheckpointIterator):
@@ -216,9 +267,8 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
 
 
 # @TODO: Support non-zipped files.
-# @TODO: Change default buffer size to a more reasonable value.
 # @TODO: Support index files?
-class IterableChunkedDataset:
+class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an iterator
     _chunk_file_paths: Union[str, Iterable[str]]
     _shuffle: bool
     _buffer_size: int
@@ -226,6 +276,8 @@ class IterableChunkedDataset:
     _seed: Optional[int]
     _num_instances: int
     _instance_rank: int
+
+    _iterator: Iterator[Any]  # our output iterator
 
     def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
         """
@@ -256,26 +308,34 @@ class IterableChunkedDataset:
         self._seed = seed
         self._num_instances = num_instances
         self._instance_rank = instance_rank
-
-    def __iter__(self):
+        self.__setstate__(None)
+    
+    def __setstate__(self, checkpoint):
         if not self._shuffle:
-            chunks = cycle(self._chunk_file_paths)
+            chunks = cycle(self._chunk_file_paths)  # @TODO: make checkpointable
         else:
             chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
-            chunks = islice(chunks, self._instance_rank, None, self._num_instances)
-        
-        samples = _IterableChunkedData(chunks)
+            chunks = islice(chunks, self._instance_rank, None, self._num_instances)   # @TODO: make checkpointable
+        samples = iter(_ChunkedDataIterator(chunks))  # @TODO: create checkpointable version of this
         if self._shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = self._seed
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
             samples = _BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
+        if checkpoint is not None:
+            samples.__setstate__(checkpoint)
+        self._iterator = samples
+    
+    def __getstate__(self):
+        return self._iterator.__getstate__()
+    
+    def __next__(self):
+        item = next(self._iterator)
         if self._transform is not None:
-            samples = (self._transform(item) for item in samples)
-        return iter(samples)
-
+            item = self._transform(item)
+        return item
 
 
 if __name__ == '__main__':
