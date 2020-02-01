@@ -149,7 +149,7 @@ class NativeIterator(_ICheckpointIterator):
             next(self._iterator)
 
 
-class BufferedShuffleIterator(_ICheckpointIterator):
+class _BufferedShuffleIterator(_ICheckpointIterator):
     def __init__(self, input_iterator: _ICheckpointIterator, buffer_size: int, seed: int = 0):
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
@@ -196,7 +196,7 @@ class BufferedShuffleIterator(_ICheckpointIterator):
         # @BUGBUG?: Does this handle the flush part?
 
 
-class _IterableBufferedShuffler:  # @TODO: we should next replace this by BufferedShuffleIterator above
+class _IterableBufferedShuffler:  # @TODO: we should next replace this by _BufferedShuffleIterator above
     _iterable: Iterable[Any]
     _buffer_size: int
     _seed: Optional[int]
@@ -302,16 +302,16 @@ if __name__ == '__main__':
     data_size = 10**5
 
     data = NativeIterator(iter(range(data_size)))
-    shuffled_data = BufferedShuffleIterator(data, 100)
+    shuffled_data = _BufferedShuffleIterator(data, 100)
     not_checkpointed = list(shuffled_data)
 
     data = NativeIterator(iter(range(data_size)))
-    shuffled_data = BufferedShuffleIterator(data, 100)
+    shuffled_data = _BufferedShuffleIterator(data, 100)
     checkpointed = list(islice(shuffled_data, 10000-10))
 
     checkpoint = shuffled_data.__getstate__()
     data = NativeIterator(iter(range(data_size)))
-    shuffled_data = BufferedShuffleIterator(data, 100, 42)
+    shuffled_data = _BufferedShuffleIterator(data, 100, 42)
     shuffled_data.__setstate__(checkpoint)
     checkpointed += list(shuffled_data)
 
