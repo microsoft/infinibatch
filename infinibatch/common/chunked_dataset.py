@@ -25,10 +25,11 @@ def namedtuple_from(**members):
     from collections import namedtuple
     return namedtuple("namedtuple_from", members.keys())(**members)
 
-def _advance_iterator(iter: Iterator[Any], n: int):
+
+def _advance_iterator(iterator: Iterator[Any], n: int):
     """Little helper to advance an iterator by n items"""
     for _ in range(n):
-        next(iter)
+        next(iterator)
     return n
 
 
@@ -127,8 +128,8 @@ class _ChunkedDataIterator(_ICheckpointIterator):
 
     _iterator: Iterator[Any]
 
-    _files_read: int
-    _lines_read_in_last_file: int
+    _file_index: int
+    _line_index: int
 
     def __init__(self, chunk_file_paths: Iterable[str]):
         """
@@ -141,31 +142,34 @@ class _ChunkedDataIterator(_ICheckpointIterator):
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
-        self._files_read              = checkpoint.files_read              if checkpoint else 0
-        self._lines_read_in_last_file = checkpoint.lines_read_in_last_file if checkpoint else 0
+        self._file_index = checkpoint.file_index if checkpoint else 0
+        self._line_index = checkpoint.line_index if checkpoint else 0
         def _generate():
             chunk_file_paths = iter(self._chunk_file_paths)  # @BUGBUG: This assumes that this is restartable, which it is not. Really should use __setstate__ here as well
-            _advance_iterator(chunk_file_paths, self._files_read)  # @TODO: If source is a cycle, then this may not be cheap
-            skip_to_checkpoint = self._lines_read_in_last_file
-            self._lines_read_in_last_file = 0
+            _advance_iterator(chunk_file_paths, self._file_index)  # @TODO: If source is a cycle, then this may not be cheap
+            skip_to_checkpoint = self._line_index
             # main loop over chunk files
             for chunk_file_path in chunk_file_paths:
-                #print("Reading chunk file", chunk_file_path, file=sys.stderr)
+                #print("Reading chunk file", chunk_file_path, self._file_index, file=sys.stderr)
                 with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
                     data = iter(f.read().splitlines())
+                self._line_index = 0
                 if skip_to_checkpoint:
-                    self._lines_read_in_last_file += _advance_iterator(data, skip_to_checkpoint)
+                    #print("Skipping to index", skip_to_checkpoint, file=sys.stderr)
+                    self._line_index += _advance_iterator(data, skip_to_checkpoint)
                     skip_to_checkpoint = 0
                 # main loop over lines
                 for item in data:
-                    self._lines_read_in_last_file += 1
+                    #print(self._line_index, ":", item)
+                    self._line_index += 1
                     yield item
+                self._file_index += 1
         self._iterator = _generate()
     
     def __getstate__(self) -> NamedTuple:
         return namedtuple_from(
-            files_read              = self._files_read,
-            lines_read_in_last_file = self._lines_read_in_last_file)
+            file_index              = self._file_index,
+            line_index = self._line_index)
 
     def __next__(self):
         return next(self._iterator)
@@ -181,11 +185,12 @@ class NativeIterator(_ICheckpointIterator):
     This version just replays the iterator all the way to the checkpoint, which will
     make it inefficient for some important use cases.
     """
+    _input_iterator: Iterator[Any]
     _iterator: Iterator[Any]
     _consumed_items: int
 
     def __init__(self, iterator: Iterator[Any]):
-        self._iterator = iterator
+        self._input_iterator = iterator
         self.__setstate__(None)
 
     def __next__(self):
@@ -198,6 +203,7 @@ class NativeIterator(_ICheckpointIterator):
             consumed_items = self._consumed_items)
 
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        self._iterator = iter(self._input_iterator)  # @BUGBUG: This only works if _input_iterator is an iterable, e.g. a list
         self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint else 0
 
 
@@ -267,7 +273,7 @@ class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an ite
     _chunk_file_paths: Union[str, Iterable[str]]
     _shuffle: bool
     _buffer_size: int
-    _transform: Callable[[Any], Any] # @TODO: specify the signature
+    _transform: Callable[[Any], Any]
     _seed: Optional[int]
     _num_instances: int
     _instance_rank: int
@@ -284,18 +290,19 @@ class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an ite
         paths -- path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
         shuffle -- if true, the data is shuffled
         buffer_size -- size of the buffer in number of samples / data items used for shuffling
-        transform -- transform to be applied to each data item  --@TODO: specify its signature
+        transform -- transform to be applied to each data item (transform(Any) -> Any)
         seed -- random seed (or None)
         num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
-        self._chunk_file_paths = []
-        for path in paths:
-            for subpath in os.scandir(path):
-                if subpath.is_file() and subpath.name.endswith('.gz'):
-                    self._chunk_file_paths.append(os.path.join(path, subpath.name))
+        self._chunk_file_paths = [  # enumerate all .gz files in the given paths
+            os.path.join(path, subpath.name)
+            for path in paths
+            for subpath in os.scandir(path)
+            if subpath.is_file() and subpath.name.endswith('.gz')
+        ]
         self._chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
         self._shuffle = shuffle
         self._buffer_size = buffer_size
@@ -307,12 +314,13 @@ class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an ite
     
     def __setstate__(self, checkpoint):
         if not self._shuffle:
-            chunks = cycle(self._chunk_file_paths)  # @TODO: make checkpointable
+            #chunks = NativeIterator(cycle(self._chunk_file_paths))
+            chunks = NativeIterator(list(self._chunk_file_paths) * 100)  # @TODO: temporary workaround to be able to develop
         else:
             chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed)
         if self._num_instances > 1:
-            chunks = islice(chunks, self._instance_rank, None, self._num_instances)   # @TODO: make checkpointable
-        samples = iter(_ChunkedDataIterator(chunks))  # @TODO: create checkpointable version of this
+            chunks = islice(chunks, self._instance_rank, None, self._num_instances)   # @TODO: make checkpointable. Tests pass, by luck I think.
+        samples = _ChunkedDataIterator(chunks)
         if self._shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = self._seed
@@ -324,7 +332,7 @@ class ChunkedDatasetIterator(_ICheckpointIterator):  # @TODO: This is now an ite
         self._iterator = samples
     
     def __getstate__(self):
-        return self._iterator.__getstate__()
+        return self._iterator.__getstate__()  # this iterator has no state on its own
     
     def __next__(self):
         item = next(self._iterator)

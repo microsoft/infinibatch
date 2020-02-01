@@ -154,16 +154,21 @@ class TestChunkedDataIterator(TestBase):
     def test_checkpointing(self):
         chunk_file_paths = [os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz')]
         # @BUGBUG: Need to use itertools.cycle(chunk_file_paths) ^^ here, but that's not checkpointable.
-        #          So for now we repeat it a few times.
+        #          So for now we repeat it a few times:
         chunk_file_paths *= 50
         random = Random()
         for _ in range(20):
-            test_length = random.randrange(11,313)
+            first_length = random.randrange(11,313)
+            extra_length = random.randrange(11,331)
             dataset = _ChunkedDataIterator(chunk_file_paths)
+            for _ in range(first_length):
+                next(dataset)
             checkpoint = dataset.__getstate__()
-            items0 = list(itertools.islice(dataset, test_length))
+            items0 = list(itertools.islice(dataset, extra_length))
+            #print(len(items0))
             dataset.__setstate__(checkpoint)
-            items1 = list(itertools.islice(dataset, test_length))
+            items1 = list(itertools.islice(dataset, extra_length))
+            #print(len(items1))
             self.assertListEqual(items0, items1)
 
 
@@ -202,13 +207,22 @@ class TestIterableChunkedDataset(TestBase):
         self.assertMultisetEqual(set(items0 + items1), self.flattened_test_data)
 
     def test_checkpointing(self):
-        dataset = ChunkedDatasetIterator(self.data_dir, shuffle=False, num_instances=2, instance_rank=0)
-        checkpoint = dataset.__getstate__()
-        items0 = list(itertools.islice(dataset, len(self.test_data[0]) + len(self.test_data[2])))
-        dataset.__setstate__(checkpoint)
-        items1 = list(itertools.islice(dataset, len(self.test_data[1]) + len(self.test_data[3])))
-        self.assertListEqual(items0, items1)
+        random = Random()
+        for _ in range(20):
+            first_length = random.randrange(11,21)
+            extra_length = random.randrange(11,21)
+            dataset = ChunkedDatasetIterator(self.data_dir, shuffle=False, num_instances=2, instance_rank=0)
+            for _ in range(first_length):
+                next(dataset)
+            checkpoint = dataset.__getstate__()
+            items0 = list(itertools.islice(dataset, extra_length))
+            #print(items0)
+            dataset.__setstate__(checkpoint)
+            items1 = list(itertools.islice(dataset, extra_length))
+            #print(items1)
+            self.assertListEqual(items0, items1)
 
 
 if __name__ == '__main__':
     unittest.main()
+    #unittest.main(TestChunkedDataIterator())
