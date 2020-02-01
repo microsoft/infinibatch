@@ -152,10 +152,8 @@ class TestChunkedDataIterator(TestBase):
         shutil.rmtree(crlf_dir)
 
     def test_checkpointing(self):
-        chunk_file_paths = [os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz')]
-        # @BUGBUG: Need to use itertools.cycle(chunk_file_paths) ^^ here, but that's not checkpointable.
-        #          So for now we repeat it a few times:
-        chunk_file_paths *= 50
+        chunk_file_paths = (os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz'))
+        chunk_file_paths = _InfinitePermutationIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
         random = Random()
         for _ in range(20):
             first_length = random.randrange(11,313)

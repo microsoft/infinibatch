@@ -128,32 +128,37 @@ class _InfinitePermutationIterator(_ICheckpointIterator):  # ...how to say in Py
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 # @TODO: Support non-gzipped files as well
 class _ChunkedDataIterator(_ICheckpointIterator):
-    _chunk_file_paths: Iterable[str]
+    _chunk_file_paths: Iterator[str]
+    _is_input_checkpointable: bool
 
     _iterator: Iterator[Any]
 
-    _file_index: int
+    _input_state: Union[Optional[Any], int]
     _line_index: int
 
-    def __init__(self, chunk_file_paths: Iterable[str]):
+    def __init__(self, chunk_file_paths: Iterator[str]):
         """
         Reads data (text lines) from chunk files.
 
         Args:
-            chunk_file_paths: iterable of paths to chunk files   --@BUGBUG: Must use a checkpointable type
+            chunk_file_paths: iterable of paths to chunk files   --@BUGBUG: Must presently be a checkpointable type
         """
         self._chunk_file_paths = chunk_file_paths
+        self._is_input_checkpointable = isinstance(self._chunk_file_paths, _ICheckpointIterator)
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
-        self._file_index = checkpoint.file_index if checkpoint else 0
-        self._line_index = checkpoint.line_index if checkpoint else 0
+        self._input_state = checkpoint.nested_state if checkpoint else None if self._is_input_checkpointable else 0
+        self._line_index  = checkpoint.line_index   if checkpoint else 0
+        if self._is_input_checkpointable:
+            self._chunk_file_paths.__setstate__(self._input_state)
+        else:
+            self._chunk_file_paths = iter(self._chunk_file_paths)  # @BUGBUG: This assumes that this is an iterable where iter() resets the iterator
+            _advance_iterator(self._chunk_file_paths, self._input_state)
         def _generate():
-            chunk_file_paths = iter(self._chunk_file_paths)  # @BUGBUG: This assumes that this is restartable, which it is not. Really should use __setstate__ here as well
-            _advance_iterator(chunk_file_paths, self._file_index)  # @TODO: If source is a cycle, then this may not be cheap
             skip_to_checkpoint = self._line_index
             # main loop over chunk files
-            for chunk_file_path in chunk_file_paths:
+            for chunk_file_path in self._chunk_file_paths:
                 #print("Reading chunk file", chunk_file_path, self._file_index, file=sys.stderr)
                 with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
                     data = iter(f.read().splitlines())
@@ -164,16 +169,16 @@ class _ChunkedDataIterator(_ICheckpointIterator):
                     skip_to_checkpoint = 0
                 # main loop over lines
                 for item in data:
-                    #print(self._line_index, ":", item)
                     self._line_index += 1
                     yield item
-                self._file_index += 1
+                self._input_state = self._chunk_file_paths.__getstate__() if self._is_input_checkpointable else \
+                                    (self._input_state + 1)
         self._iterator = _generate()
     
     def __getstate__(self) -> NamedTuple:
         return namedtuple_from(
-            file_index              = self._file_index,
-            line_index = self._line_index)
+            nested_state = self._input_state,
+            line_index   = self._line_index)
 
     def __next__(self):
         return next(self._iterator)
