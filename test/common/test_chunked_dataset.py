@@ -106,10 +106,9 @@ class TestChunkedDataIterator(TestBase):
 
 
 class TestBufferedShuffleIterator(TestBase):
-    # @BUGBUG: This test currently fails. It works with the old _IterableBufferedShuffler
-    #def test_shuffle(self):
-    #    items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))  # @TODO: why the copy? the data is a list
-    #    self.assertMultisetEqual(items, self.flattened_test_data)
+    def test_shuffle(self):
+        items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))  # @TODO: why the copy? the data is a list
+        self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
         items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))

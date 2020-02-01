@@ -154,7 +154,7 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
-        self._generator = self._create_generator()  # @TODO: call __setstate__ instead
+        self._generator = self._create_generator()  # @TODO: centralize this in __setstate__
 
     def __next__(self):
         return next(self._generator)
@@ -178,22 +178,22 @@ class _BufferedShuffleIterator(_ICheckpointIterator):
 
         # flush buffer
         while self._buffer:
-            yield self._buffer.pop()
+            item = self._buffer.pop()
+            if item is not None:
+                yield item
 
     def __getstate__(self):
-        #previous_checkpoint = self._input_iterator.__getstate__()  # @TODO: let's not assume that the underlying iterator's checkpoint is a list
-        #local_checkpoint = [copy.deepcopy(self._buffer), self._random.getstate()]
-        #previous_checkpoint.append(local_checkpoint)
-        return (self._input_iterator.__getstate__(),
-                (copy.deepcopy(self._buffer),
-                 self._random.getstate()))
+        return (self._input_iterator.__getstate__(),  # nested_checkpoint
+                (copy.deepcopy(self._buffer),         # buffer
+                 self._random.getstate()))            # random_state
 
     def __setstate__(self, checkpoint):
-        self._input_iterator.__setstate__(checkpoint[0])
-        local_checkpoint = checkpoint[1]
-        self._buffer = local_checkpoint[0]
-        self._random.setstate(local_checkpoint[1])  # @TODO: better recreate the generator
-        # @BUGBUG?: Does this handle the flush part?
+        nested_checkpoint, local_checkpoint = checkpoint
+        buffer, random_state = local_checkpoint
+        self._input_iterator.__setstate__(nested_checkpoint)
+        self._buffer = buffer
+        self._random.setstate(random_state)
+        # @BUGBUG?: Does this handle the flush part? May require to recreate the generator.
 
 
 class _IterableBufferedShuffler:  # @TODO: we should next replace this by _BufferedShuffleIterator above
