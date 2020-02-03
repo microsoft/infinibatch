@@ -236,15 +236,17 @@ class _BufferedShuffleIterator(ICheckpointIterator):
     _random: Random
     _generator: Iterator[Any]
 
-    def __init__(self, input_iterator: ICheckpointIterator, buffer_size: int, seed: int = 0):
+    def __init__(self, input_iterator: Union[ICheckpointIterator,Iterable[Any]], buffer_size: int, seed: int = 0):
         """
         Shuffles given iterable using a limited buffer.
         
         Arguments:
-        input_iterator -- input iterable over items to shuffle
+        input_iterator -- checkpointable iterator or iterable over input items to shuffle
         buffer_size -- size of the buffer in number of items used for shuffling
         seed -- random seed used for shuffling (or None)
         """
+        if not isinstance(input_iterator, ICheckpointIterator):
+            input_iterator = NativeIterator(input_iterator)
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
@@ -288,8 +290,8 @@ class _BufferedShuffleIterator(ICheckpointIterator):
             self._buffer = checkpoint.buffer
             self._random.setstate(checkpoint.random_state)
             # @TODO: Can we add a comment how the flush part is handled?
-        #else:
-        #    self._input_iterator.__setstate__(None)  # @BUGBUG: We need this, but it will fail if input iterator is not checkpointable
+        else:
+            self._input_iterator.__setstate__(None)
         self._generator = self._generate()
 
 
