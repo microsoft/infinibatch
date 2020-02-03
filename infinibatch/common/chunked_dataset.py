@@ -137,6 +137,7 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
 # @TODO: Support non-gzipped files as well
 class _ChunkedDataIterator(ICheckpointIterator):
     _chunk_file_paths: Iterator[str]
+    _transform: Callable[[str],Any]
     _is_input_checkpointable: bool
 
     _iterator: Iterator[Any]
@@ -144,14 +145,16 @@ class _ChunkedDataIterator(ICheckpointIterator):
     _input_state: Union[Optional[Any], int]
     _line_index: int
 
-    def __init__(self, chunk_file_paths: Iterator[str]):
+    def __init__(self, chunk_file_paths: Iterator[str], transform: Callable[[str],Any]=None):
         """
-        Reads data (text lines) from chunk files.
+        Reads data items (text lines) from chunk files. Optionally parses each item with a caller-supplied transform.
 
         Args:
-            chunk_file_paths: iterable of paths to chunk files   --@BUGBUG: Must presently be a checkpointable type
+            chunk_file_paths: iterable of paths to chunk files
+            transform: transform to parse each text line (transform(str) -> Any)
         """
         self._chunk_file_paths = chunk_file_paths
+        self._transform = transform
         self._is_input_checkpointable = isinstance(self._chunk_file_paths, ICheckpointIterator)
         self.__setstate__(None)
     
@@ -189,7 +192,10 @@ class _ChunkedDataIterator(ICheckpointIterator):
             line_index   = self._line_index)
 
     def __next__(self):
-        return next(self._iterator)
+        item = next(self._iterator)
+        if self._transform is not None:  # transform is applied on the fly here
+            item = self._transform(item)
+        return item
 
 
 # @TODO: Can we have one that also takes an input iterator?
@@ -289,13 +295,11 @@ class _BufferedShuffleIterator(ICheckpointIterator):
 
 # @TODO: Support non-zipped files.
 # @TODO: Support index files?
-# @TODO: Besides the transform, this is no more than a factory function. We should change it to one (and have a simple checkpointable TransformIterator)
-class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iterator
-    _transform: Callable[[Any], Any]
-
+# @TODO: This is no more than a factory function. We should change it to one
+class ChunkedDatasetIterator(ICheckpointIterator):
     _iterator: Iterator[Any]  # our output iterator
 
-    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
+    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform:Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
         """
         Dataset reading data from gzipped chunks.
 
@@ -312,8 +316,6 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
-        self._transform = transform
-
         # set up the chunk reader
         chunk_file_paths = [  # enumerate all .gz files in the given paths
             os.path.join(path, subpath.name)
@@ -323,10 +325,8 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
         ]
         chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
         chunks  = _InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
-
         # set up the item reader
-        samples = _ChunkedDataIterator(chunks)
-
+        samples = _ChunkedDataIterator(chunks, transform)
         # set up the item randomizer
         if shuffle:
             # use different seed for BufferedShuffleGenerator
@@ -334,6 +334,8 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
             samples = _BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
+        
+        # this is what we are serving out
         self._iterator = samples
         self.__setstate__(None)
     
@@ -341,13 +343,10 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
         self._iterator.__setstate__(checkpoint)
     
     def __getstate__(self):
-        return self._iterator.__getstate__()  # this iterator has no state on its own
+        return self._iterator.__getstate__()
     
     def __next__(self):
-        item = next(self._iterator)
-        if self._transform is not None:
-            item = self._transform(item)
-        return item
+        return next(self._iterator)
 
 
 if __name__ == '__main__':
