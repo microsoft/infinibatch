@@ -330,9 +330,6 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
         self._seed = seed
         self._num_instances = num_instances
         self._instance_rank = instance_rank
-        self.__setstate__(None)
-    
-    def __setstate__(self, checkpoint):
         chunks  = _InfinitePermutationIterator(self._chunk_file_paths, self._seed, shuffle=self._shuffle, num_instances=self._num_instances, instance_rank=self._instance_rank)
         samples = _ChunkedDataIterator(chunks)
         if self._shuffle:
@@ -341,9 +338,12 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
             samples = _BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
-        if checkpoint is not None:
-            samples.__setstate__(checkpoint)
         self._iterator = samples
+        self.__setstate__(None)
+    
+    def __setstate__(self, checkpoint):
+        if checkpoint is not None:
+            self._iterator.__setstate__(checkpoint)
     
     def __getstate__(self):
         return self._iterator.__getstate__()  # this iterator has no state on its own
