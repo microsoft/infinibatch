@@ -289,14 +289,9 @@ class _BufferedShuffleIterator(ICheckpointIterator):
 
 # @TODO: Support non-zipped files.
 # @TODO: Support index files?
+# @TODO: Besides the transform, this is no more than a factory function. We should change it to one (and have a simple checkpointable TransformIterator)
 class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iterator
-    _chunk_file_paths: Union[str, Iterable[str]]
-    _shuffle: bool
-    _buffer_size: int
     _transform: Callable[[Any], Any]
-    _seed: Optional[int]
-    _num_instances: int
-    _instance_rank: int
 
     _iterator: Iterator[Any]  # our output iterator
 
@@ -317,33 +312,33 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
-        self._chunk_file_paths = [  # enumerate all .gz files in the given paths
+        self._transform = transform
+
+        # set up the chunk reader
+        chunk_file_paths = [  # enumerate all .gz files in the given paths
             os.path.join(path, subpath.name)
             for path in paths
             for subpath in os.scandir(path)
             if subpath.is_file() and subpath.name.endswith('.gz')
         ]
-        self._chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
-        self._shuffle = shuffle
-        self._buffer_size = buffer_size
-        self._transform = transform
-        self._seed = seed
-        self._num_instances = num_instances
-        self._instance_rank = instance_rank
-        chunks  = _InfinitePermutationIterator(self._chunk_file_paths, self._seed, shuffle=self._shuffle, num_instances=self._num_instances, instance_rank=self._instance_rank)
+        chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
+        chunks  = _InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+
+        # set up the item reader
         samples = _ChunkedDataIterator(chunks)
-        if self._shuffle:
+
+        # set up the item randomizer
+        if shuffle:
             # use different seed for BufferedShuffleGenerator
-            buffered_shuffle_iterator_seed = self._seed
+            buffered_shuffle_iterator_seed = seed
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
-            samples = _BufferedShuffleIterator(samples, self._buffer_size, buffered_shuffle_iterator_seed)
+            samples = _BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
         self._iterator = samples
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint):
-        if checkpoint is not None:
-            self._iterator.__setstate__(checkpoint)
+        self._iterator.__setstate__(checkpoint)
     
     def __getstate__(self):
         return self._iterator.__getstate__()  # this iterator has no state on its own
