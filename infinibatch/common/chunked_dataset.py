@@ -138,7 +138,6 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
 class _ChunkedDataIterator(ICheckpointIterator):
     _chunk_file_paths: Iterator[str]
     _transform: Callable[[str],Any]
-    _is_input_checkpointable: bool
 
     _iterator: Iterator[Any]
 
@@ -153,19 +152,16 @@ class _ChunkedDataIterator(ICheckpointIterator):
             chunk_file_paths: iterable of paths to chunk files
             transform: transform to parse each text line (transform(str) -> Any)
         """
+        if not isinstance(chunk_file_paths, ICheckpointIterator):
+            chunk_file_paths = NativeIterator(chunk_file_paths)
         self._chunk_file_paths = chunk_file_paths
         self._transform = transform
-        self._is_input_checkpointable = isinstance(self._chunk_file_paths, ICheckpointIterator)
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
-        self._input_state = checkpoint.nested_state if checkpoint else None if self._is_input_checkpointable else 0
+        self._input_state = checkpoint.nested_state if checkpoint else None
         self._line_index  = checkpoint.line_index   if checkpoint else 0
-        if self._is_input_checkpointable:
-            self._chunk_file_paths.__setstate__(self._input_state)
-        else:
-            self._chunk_file_paths = iter(self._chunk_file_paths)  # @BUGBUG: This assumes that this is an iterable where iter() resets the iterator
-            _advance_iterator(self._chunk_file_paths, self._input_state)
+        self._chunk_file_paths.__setstate__(self._input_state)
         def _generate():
             skip_to_checkpoint = self._line_index
             # main loop over chunk files
@@ -182,8 +178,7 @@ class _ChunkedDataIterator(ICheckpointIterator):
                 for item in data:
                     self._line_index += 1
                     yield item
-                self._input_state = self._chunk_file_paths.__getstate__() if self._is_input_checkpointable else \
-                                    (self._input_state + 1)
+                self._input_state = self._chunk_file_paths.__getstate__()
         self._iterator = _generate()
     
     def __getstate__(self) -> NamedTuple:
@@ -204,16 +199,20 @@ class _ChunkedDataIterator(ICheckpointIterator):
 #        setstate() in the input iterator and then advance only the remaining few.
 class NativeIterator(ICheckpointIterator):
     """
-    Simple checkpointable wrapper around native Python iterators.
+    Simple checkpointable wrapper around native Python iterable.
     This version just replays the iterator all the way to the checkpoint, which will
     make it inefficient for some important use cases.
+
+    Note: It only works with true iterables that reset upon each call to iter().
+    Iterators have an iter() method but don't reset themselves.
     """
-    _input_iterator: Iterator[Any]
+    _input_iterable: Iterable[Any]
     _iterator: Iterator[Any]
     _consumed_items: int
 
-    def __init__(self, iterator: Iterator[Any]):
-        self._input_iterator = iterator
+    def __init__(self, iterable: Iterable[Any]):
+        # @BUGBUG: We should check whether the input iterable is really a restartable iterable (and not an fake one such as an iterator)
+        self._input_iterable = iterable
         self.__setstate__(None)
 
     def __next__(self):
@@ -226,7 +225,7 @@ class NativeIterator(ICheckpointIterator):
             consumed_items = self._consumed_items)
 
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
-        self._iterator = iter(self._input_iterator)  # @BUGBUG: This only works if _input_iterator is an iterable, e.g. a list
+        self._iterator = iter(self._input_iterable)
         self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint else 0
 
 
@@ -241,11 +240,11 @@ class _BufferedShuffleIterator(ICheckpointIterator):
         Shuffles given iterable using a limited buffer.
         
         Arguments:
-        input_iterator -- checkpointable iterator or iterable over input items to shuffle
+        input_iterator -- checkpointable iterator or restartable iterable over input items to shuffle
         buffer_size -- size of the buffer in number of items used for shuffling
         seed -- random seed used for shuffling (or None)
         """
-        if not isinstance(input_iterator, ICheckpointIterator):
+        if not isinstance(input_iterator, ICheckpointIterator):  # @TODO: factor this into a helper method
             input_iterator = NativeIterator(input_iterator)
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
