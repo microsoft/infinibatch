@@ -20,7 +20,7 @@ class CheckpointIterator:
         raise NotImplementedError()
 
 
-class NativeIterator(CheckpointIterator):
+class NativeCheckpointableIterator(CheckpointIterator):
     def __init__(self, iterator: Iterator[Any]):
         self._iterator = iterator
         self._consumed_items = 0
@@ -87,16 +87,16 @@ class BufferedShuffleIterator(CheckpointIterator):
 if __name__ == '__main__':
     data_size = 10**5
 
-    data = NativeIterator(iter(range(data_size)))
+    data = NativeCheckpointableIterator(iter(range(data_size)))
     shuffled_data = BufferedShuffleIterator(data, 100)
     not_checkpointed = list(shuffled_data)
 
-    data = NativeIterator(iter(range(data_size)))
+    data = NativeCheckpointableIterator(iter(range(data_size)))
     shuffled_data = BufferedShuffleIterator(data, 100)
     checkpointed = list(islice(shuffled_data, 10000-10))
 
     checkpoint = shuffled_data.checkpoint()
-    data = NativeIterator(iter(range(data_size)))
+    data = NativeCheckpointableIterator(iter(range(data_size)))
     shuffled_data = BufferedShuffleIterator(data, 100, 42)
     shuffled_data.load_checkpoint(checkpoint)
     checkpointed += list(shuffled_data)

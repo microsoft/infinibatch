@@ -1,12 +1,12 @@
 from typing import Union, List, Iterator, Any, Callable, Optional, NamedTuple
 from random import Random
 from itertools import islice
-from .chunked_dataset import ICheckpointIterator, namedtuple_from, _advance_iterator
+from .chunked_dataset import ICheckpointableIterator, namedtuple_from, _advance_iterator
 
 
 # Note: This could be implemented more elegantly as a generator function.
 # However, that may no longer be true with checkpointing, so let's keep it as a class for now.
-class BucketedReadaheadBatchDatasetIterator(ICheckpointIterator):
+class BucketedReadaheadBatchDatasetIterator(ICheckpointableIterator):
     """
     Iterates over items from a Dataset and group items of similar length into batches.
 

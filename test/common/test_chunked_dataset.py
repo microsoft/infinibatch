@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from typing import Iterable, Iterator, Any
 
-from infinibatch.common.chunked_dataset import ChunkedDatasetIterator, _InfinitePermutationIterator, _ChunkedDataIterator, _BufferedShuffleIterator, NativeIterator
+from infinibatch.common.chunked_dataset import ChunkedDatasetIterator, _InfinitePermutationIterator, _ChunkedDataIterator, _BufferedShuffleIterator, NativeCheckpointableIterator
 from infinibatch.common.bucketed_readahead_batch_generator import BucketedReadaheadBatchDatasetIterator
 
 
@@ -106,20 +106,20 @@ class TestInfinitePermutationIterator(TestBase):
 
 
 
-class TestNativeIterator(TestBase):
+class TestNativeCheckpointableIterator(TestBase):
     def test(self):
         data_size = 10**5
 
-        data = NativeIterator(iter(range(data_size)))
+        data = NativeCheckpointableIterator(iter(range(data_size)))
         shuffled_data = _BufferedShuffleIterator(data, 100)
         not_checkpointed = list(shuffled_data)
 
-        data = NativeIterator(iter(range(data_size)))
+        data = NativeCheckpointableIterator(iter(range(data_size)))
         shuffled_data = _BufferedShuffleIterator(data, 100)
         checkpointed = list(itertools.islice(shuffled_data, 10000-10))
 
         checkpoint = shuffled_data.__getstate__()
-        data = NativeIterator(iter(range(data_size)))
+        data = NativeCheckpointableIterator(iter(range(data_size)))
         shuffled_data = _BufferedShuffleIterator(data, 100, 42)
         shuffled_data.__setstate__(checkpoint)
         checkpointed += list(shuffled_data)
