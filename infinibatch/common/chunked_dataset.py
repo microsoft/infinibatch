@@ -54,15 +54,19 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
     Unlike most classes here, this one loads all items into RAM. For example, this is used
     for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
 
-    Arguments:
-    iterator -- input iterator
-    seed -- random seed used for shuffling (or None)
-    shuffle -- set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
+    Args:
+        iterator: input iterator
+        seed: random seed used for shuffling (or None)
+        shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
+        num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+        instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
     """
     # constructor arguments
     _original_items: List[Any]  # note: in this case, the source iterator is not checkpointable, hence we must instead keep a full copy
     _seed: Optional[int]
     _shuffle: bool
+    _num_instances: int
+    _instance_rank: int
 
     # output iterator that generates our output sequence
     _generator: Iterator[Any]
@@ -71,11 +75,13 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
     _random_state: Any
     _item_count: int
 
-    def __init__(self, items: Iterator[Any], seed: Optional[int] = None, shuffle: bool = True):
+    def __init__(self, items: Iterator[Any], seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         # keep arguments for iter_from_checkpoint
         self._original_items = list(items)  # keep a local copy, since items is an iterator
         self._shuffle = shuffle
         self._seed = seed
+        self._num_instances = num_instances
+        self._instance_rank = instance_rank
         self.__setstate__(from_checkpoint=None)
 
     # implementation of Iterator protocol:
@@ -92,7 +98,7 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
     def __getstate__(self) -> NamedTuple:
         return namedtuple_from(
             random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
-            item_count   = self._item_count)    # how many items have already been served from the current shuffling
+            item_count   = self._item_count)    # how many items have already been iterated over in the current shuffling
 
     def __setstate__(self, from_checkpoint: Optional[NamedTuple]):
         # set iteration state. Do this outside the generator below in case __getstate__() is called before ever iterating
@@ -112,7 +118,7 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
                 self._random_state = random.getstate()  # remember random state before shuffling
                 self._item_count   = 0
                 shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use __setstate__(from_checkpoint.nested_state) on it
-                if (self._shuffle):
+                if self._shuffle:
                     random.shuffle(shuffled_items)
                 shuffled_iterator = iter(shuffled_items)
                 # skip initial items when restarting from checkpoint
@@ -121,8 +127,9 @@ class _InfinitePermutationIterator(ICheckpointIterator):  # ...how to say in Pyt
                     skip_to_checkpoint = 0  # done skipping
                 # main inner loop over items
                 for item in shuffled_iterator:
-                    self._item_count += 1  # record how many items we have served from this pass over the items
-                    yield item
+                    self._item_count += 1  # record how many items we have iterated over in this pass over the items
+                    if (self._item_count-1) % self._num_instances == self._instance_rank:  # build-in islice facility
+                        yield item
         self._generator = _generate()
 
 
@@ -326,9 +333,7 @@ class ChunkedDatasetIterator(ICheckpointIterator):  # @TODO: This is now an iter
         self.__setstate__(None)
     
     def __setstate__(self, checkpoint):
-        chunks = _InfinitePermutationIterator(self._chunk_file_paths, self._seed, shuffle=self._shuffle)
-        if self._num_instances > 1:
-            chunks = islice(chunks, self._instance_rank, None, self._num_instances)   # @TODO: make checkpointable. Tests pass, by luck I think.
+        chunks  = _InfinitePermutationIterator(self._chunk_file_paths, self._seed, shuffle=self._shuffle, num_instances=self._num_instances, instance_rank=self._instance_rank)
         samples = _ChunkedDataIterator(chunks)
         if self._shuffle:
             # use different seed for BufferedShuffleGenerator
