@@ -135,6 +135,8 @@ class _InfinitePermutationIterator(ICheckpointableIterator):  # ...how to say in
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 # @TODO: Support non-gzipped files as well
+# @TODO: Is it wise to have the transform here? It will increase startup time [Liyang]
+# @TODO: Shoult the splitlines() below also be passable as a lambda? Then we could read binary files. Maybe combine with transform?
 class _ChunkedDataIterator(ICheckpointableIterator):
     _chunk_file_paths: Iterator[str]
     _transform: Callable[[str],Any]
@@ -166,7 +168,7 @@ class _ChunkedDataIterator(ICheckpointableIterator):
             skip_to_checkpoint = self._line_index
             # main loop over chunk files
             for chunk_file_path in self._chunk_file_paths:
-                #print("Reading chunk file", chunk_file_path, self._file_index, file=sys.stderr)
+                #print("Reading chunk file", chunk_file_path, file=sys.stderr)
                 with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
                     data = iter(f.read().splitlines())
                 self._line_index = 0
