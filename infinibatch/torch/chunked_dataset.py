@@ -3,7 +3,7 @@ from typing import Union, Iterable, Any
 import torch
 from torch.utils.data import IterableDataset
 
-from infinibatch import common
+import infinibatch
 
 
 class IterableChunkedDataset(IterableDataset):
@@ -12,7 +12,7 @@ class IterableChunkedDataset(IterableDataset):
         self.rank = rank
         self.num_workers_per_rank = num_workers_per_rank
         # instance_rank is set assuming that num_workers_per_rank = 1 and adapted dynamically in __iter__
-        self.dataset = common.chunked_dataset.IterableChunkedDataset(paths, shuffle=shuffle, buffer_size=buffer_size, transform=transform, seed=seed, num_instances=world_size*num_workers_per_rank, instance_rank=rank)
+        self.dataset = infinibatch.chunked_dataset.IterableChunkedDataset(paths, shuffle=shuffle, buffer_size=buffer_size, transform=transform, seed=seed, num_instances=world_size*num_workers_per_rank, instance_rank=rank)
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
