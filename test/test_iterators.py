@@ -4,11 +4,10 @@ from random import Random
 import os
 import shutil
 import tempfile
-import unittest
 from typing import Iterable, Iterator, Any
+import unittest
 
-from infinibatch.iterators import ChunkedDatasetIterator, _InfinitePermutationIterator, _ChunkedDataIterator, _BufferedShuffleIterator, NativeCheckpointableIterator
-from infinibatch.bucketed_readahead_batch_generator import BucketedReadaheadBatchDatasetIterator
+from infinibatch.iterators import ChunkedDatasetIterator, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator
 
 
 class TestBase(unittest.TestCase):
@@ -64,7 +63,7 @@ class TestBase(unittest.TestCase):
 class TestInfinitePermutationIterator(TestBase):
     def test_repeat_once(self):
         # This tests that two consecutive iterations through the test data yields differently ordered sequences.
-        reader: Iterator[Any] = iter(_InfinitePermutationIterator(self.flattened_test_data, 42))
+        reader: Iterator[Any] = iter(InfinitePermutationIterator(self.flattened_test_data, 42))
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
@@ -72,7 +71,7 @@ class TestInfinitePermutationIterator(TestBase):
 
     def test_reiter_once(self):
         # This differs from test_repeat_once in that we use checkpoints.
-        reader: Iterable[Any] = _InfinitePermutationIterator(self.flattened_test_data, 42)
+        reader: Iterable[Any] = InfinitePermutationIterator(self.flattened_test_data, 42)
         checkpoint = reader.__getstate__()
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         reader.__setstate__(checkpoint)
@@ -89,7 +88,7 @@ class TestInfinitePermutationIterator(TestBase):
             test_second_output_length = random.randrange(5,25)
             # source
             test_source = range(test_source_length)
-            reader = _InfinitePermutationIterator(test_source, seed=i)
+            reader = InfinitePermutationIterator(test_source, seed=i)
             # fetch a first sequence
             _ = list(itertools.islice(reader, test_first_output_length))
             #print('items0', items0)
@@ -105,22 +104,21 @@ class TestInfinitePermutationIterator(TestBase):
             self.assertTrue(items1a == items1b)
 
 
-
 class TestNativeCheckpointableIterator(TestBase):
     def test(self):
         data_size = 10**5
 
         data = NativeCheckpointableIterator(iter(range(data_size)))
-        shuffled_data = _BufferedShuffleIterator(data, 100)
+        shuffled_data = BufferedShuffleIterator(data, 100)
         not_checkpointed = list(shuffled_data)
 
         data = NativeCheckpointableIterator(iter(range(data_size)))
-        shuffled_data = _BufferedShuffleIterator(data, 100)
+        shuffled_data = BufferedShuffleIterator(data, 100)
         checkpointed = list(itertools.islice(shuffled_data, 10000-10))
 
         checkpoint = shuffled_data.__getstate__()
         data = NativeCheckpointableIterator(iter(range(data_size)))
-        shuffled_data = _BufferedShuffleIterator(data, 100, 42)
+        shuffled_data = BufferedShuffleIterator(data, 100, 42)
         shuffled_data.__setstate__(checkpoint)
         checkpointed += list(shuffled_data)
 
@@ -129,7 +127,7 @@ class TestNativeCheckpointableIterator(TestBase):
 
 class TestChunkedDataIterator(TestBase):    
     def test(self):
-        items = list(_ChunkedDataIterator(self.chunk_file_paths))
+        items = list(ChunkedDataIterator(self.chunk_file_paths))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -145,8 +143,8 @@ class TestChunkedDataIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(_ChunkedDataIterator([lf_file]))
-        crlf_dat = list(_ChunkedDataIterator([crlf_file]))
+        lf_data = list(ChunkedDataIterator([lf_file]))
+        crlf_dat = list(ChunkedDataIterator([crlf_file]))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -154,12 +152,12 @@ class TestChunkedDataIterator(TestBase):
 
     def test_checkpointing(self):
         chunk_file_paths = (os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz'))
-        chunk_file_paths = _InfinitePermutationIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
+        chunk_file_paths = InfinitePermutationIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
         random = Random(1)
         for _ in range(5):
             first_length = random.randrange(11,31)
             extra_length = random.randrange(11,33)
-            dataset = _ChunkedDataIterator(chunk_file_paths)
+            dataset = ChunkedDataIterator(chunk_file_paths)
             for _ in range(first_length):
                 next(dataset)
             checkpoint = dataset.__getstate__()
@@ -173,11 +171,11 @@ class TestChunkedDataIterator(TestBase):
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
-        items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))  # @TODO: why the copy? the data is a list
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))  # @TODO: why the copy? the data is a list
         self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
-        items = list(_BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
+        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
 
 
@@ -218,7 +216,6 @@ class TestChunkedDatasetIterator(TestBase):
             dataset.__setstate__(checkpoint)
             items2 = list(itertools.islice(dataset, extra_length))
             self.assertListEqual(items1, items2)
-
 
 
 class TestBucketedReadaheadBatchDatasetIterator(TestBase):
