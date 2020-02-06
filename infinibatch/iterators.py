@@ -8,7 +8,7 @@ from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Gen
 
 # GLOBAL TODO:
 # - implement new version of BufferedShuffleIterator that has smaller checkpoints
-# - implement some kind of buffered iterator at end of pipeline to avoid latency spikes
+# - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
 # - modify ChunkedDataIterator to also work on uncompressed data, or even more general data formats
 #    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
 
