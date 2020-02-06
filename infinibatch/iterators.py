@@ -1,12 +1,20 @@
+from abc import ABC, abstractmethod
+import copy
 import gzip
 from itertools import islice, cycle
 import os, sys
 from random import Random
 from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Generator, NamedTuple
-import copy
 
 
-def namedtuple_from(**members):
+# GLOBAL TODO:
+# - implement new version of BufferedShuffleIterator that has smaller checkpoints
+# - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
+# - modify ChunkedDataIterator to also work on uncompressed data, or even more general data formats
+#    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
+
+
+def _namedtuple_from(**members):
     """
     Creates a record of variables, which are then accessed by . syntax.
     Wraps namedtuple type creation and instantiation into a single call.
@@ -27,27 +35,67 @@ def namedtuple_from(**members):
 
 
 def _advance_iterator(iterator: Iterator[Any], n: int):
-    """Little helper to advance an iterator by n items"""
+    """ Little helper to advance an iterator by n items """
     for _ in range(n):
         next(iterator)
     return n
 
 
-class ICheckpointableIterator:  # @TODO: Can rename away the I- once done. This makes it easier during development
+class CheckpointableIterator(ABC):
+    """ Abstract base class for iterators that are checkpointable """
+    @abstractmethod
     def __next__(self):
         raise NotImplementedError()
 
     def __iter__(self):
         return self
 
+    @abstractmethod
     def __getstate__(self) -> NamedTuple:
         raise NotImplementedError()
 
+    @abstractmethod
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
         raise NotImplementedError()
 
 
-class _InfinitePermutationIterator(ICheckpointableIterator):  # ...how to say in Python: "implements interfaces Iterator[Any], Checkpointing"
+# @TODO: Can we have one that also takes an input iterator?
+#        Then getstate() can inquire that one, and remember how often we have
+#        advanced since the last call to getstate(). Upon setstate(), we'd
+#        setstate() in the input iterator and then advance only the remaining few.
+class NativeCheckpointableIterator(CheckpointableIterator):
+    """
+    Simple checkpointable wrapper around native Python iterable.
+    This version just replays the iterator all the way to the checkpoint, which will
+    make it inefficient for some important use cases.
+
+    Note: It only works with true iterables that reset upon each call to iter().
+    Iterators have an iter() method but don't reset themselves.
+    """
+    _input_iterable: Iterable[Any]
+    _iterator: Iterator[Any]
+    _consumed_items: int
+
+    def __init__(self, iterable: Iterable[Any]):
+        # @BUGBUG: We should check whether the input iterable is really a restartable iterable (and not an fake one such as an iterator)
+        self._input_iterable = iterable
+        self.__setstate__(None)
+
+    def __next__(self):
+        item = next(self._iterator)
+        self._consumed_items += 1
+        return item
+
+    def __getstate__(self) -> NamedTuple:
+        return _namedtuple_from(
+            consumed_items = self._consumed_items)
+
+    def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        self._iterator = iter(self._input_iterable)
+        self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint else 0
+
+
+class InfinitePermutationIterator(CheckpointableIterator):
     """
     Infinitely generates permutations of the items in the given iterable.
 
@@ -96,7 +144,7 @@ class _InfinitePermutationIterator(ICheckpointableIterator):  # ...how to say in
     # Names are inspired by pickle https://docs.python.org/2/library/pickle.html.
     # But they look ugly when called from user code. We can use the non-__ names, like Random.
     def __getstate__(self) -> NamedTuple:
-        return namedtuple_from(
+        return _namedtuple_from(
             random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
             item_count   = self._item_count)    # how many items have already been iterated over in the current shuffling
 
@@ -137,7 +185,7 @@ class _InfinitePermutationIterator(ICheckpointableIterator):  # ...how to say in
 # @TODO: Support non-gzipped files as well
 # @TODO: Is it wise to have the transform here? It will increase startup time [Liyang]
 # @TODO: Shoult the splitlines() below also be passable as a lambda? Then we could read binary files. Maybe combine with transform?
-class _ChunkedDataIterator(ICheckpointableIterator):
+class ChunkedDataIterator(CheckpointableIterator):
     _chunk_file_paths: Iterator[str]
     _transform: Callable[[str],Any]
 
@@ -154,7 +202,7 @@ class _ChunkedDataIterator(ICheckpointableIterator):
             chunk_file_paths: iterable of paths to chunk files
             transform: transform to parse each text line (transform(str) -> Any)
         """
-        if not isinstance(chunk_file_paths, ICheckpointableIterator):
+        if not isinstance(chunk_file_paths, CheckpointableIterator):
             chunk_file_paths = NativeCheckpointableIterator(chunk_file_paths)
         self._chunk_file_paths = chunk_file_paths
         self._transform = transform
@@ -184,7 +232,7 @@ class _ChunkedDataIterator(ICheckpointableIterator):
         self._iterator = _generate()
     
     def __getstate__(self) -> NamedTuple:
-        return namedtuple_from(
+        return _namedtuple_from(
             nested_state = self._input_state,
             line_index   = self._line_index)
 
@@ -195,49 +243,13 @@ class _ChunkedDataIterator(ICheckpointableIterator):
         return item
 
 
-# @TODO: Can we have one that also takes an input iterator?
-#        Then getstate() can inquire that one, and remember how often we have
-#        advanced since the last call to getstate(). Upon setstate(), we'd
-#        setstate() in the input iterator and then advance only the remaining few.
-class NativeCheckpointableIterator(ICheckpointableIterator):
-    """
-    Simple checkpointable wrapper around native Python iterable.
-    This version just replays the iterator all the way to the checkpoint, which will
-    make it inefficient for some important use cases.
-
-    Note: It only works with true iterables that reset upon each call to iter().
-    Iterators have an iter() method but don't reset themselves.
-    """
-    _input_iterable: Iterable[Any]
-    _iterator: Iterator[Any]
-    _consumed_items: int
-
-    def __init__(self, iterable: Iterable[Any]):
-        # @BUGBUG: We should check whether the input iterable is really a restartable iterable (and not an fake one such as an iterator)
-        self._input_iterable = iterable
-        self.__setstate__(None)
-
-    def __next__(self):
-        item = next(self._iterator)
-        self._consumed_items += 1
-        return item
-
-    def __getstate__(self) -> NamedTuple:
-        return namedtuple_from(
-            consumed_items = self._consumed_items)
-
-    def __setstate__(self, checkpoint: Optional[NamedTuple]):
-        self._iterator = iter(self._input_iterable)
-        self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint else 0
-
-
-class _BufferedShuffleIterator(ICheckpointableIterator):
+class BufferedShuffleIterator(CheckpointableIterator):
     _input_iterator: Iterator[Any]
     _buffer: List[Optional[Any]]
     _random: Random
     _generator: Iterator[Any]
 
-    def __init__(self, input_iterator: Union[ICheckpointableIterator,Iterable[Any]], buffer_size: int, seed: int = 0):
+    def __init__(self, input_iterator: Union[CheckpointableIterator,Iterable[Any]], buffer_size: int, seed: int = 0):
         """
         Shuffles given iterable using a limited buffer.
         
@@ -246,7 +258,7 @@ class _BufferedShuffleIterator(ICheckpointableIterator):
         buffer_size -- size of the buffer in number of items used for shuffling
         seed -- random seed used for shuffling (or None)
         """
-        if not isinstance(input_iterator, ICheckpointableIterator):  # @TODO: factor this into a helper method
+        if not isinstance(input_iterator, CheckpointableIterator):  # @TODO: factor this into a helper method
             input_iterator = NativeCheckpointableIterator(input_iterator)
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
@@ -280,7 +292,7 @@ class _BufferedShuffleIterator(ICheckpointableIterator):
                 yield item
 
     def __getstate__(self) -> NamedTuple:
-        return namedtuple_from(
+        return _namedtuple_from(
             nested_checkpoint = self._input_iterator.__getstate__(),
             buffer            = copy.deepcopy(self._buffer),
             random_state      = self._random.getstate())
@@ -299,7 +311,7 @@ class _BufferedShuffleIterator(ICheckpointableIterator):
 # @TODO: Support non-zipped files.
 # @TODO: Support index files?
 # @TODO: This is no more than a factory function. We should change it to one
-class ChunkedDatasetIterator(ICheckpointableIterator):
+class ChunkedDatasetIterator(CheckpointableIterator):
     _iterator: Iterator[Any]  # our output iterator
 
     def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform:Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
@@ -327,16 +339,16 @@ class ChunkedDatasetIterator(ICheckpointableIterator):
             if subpath.is_file() and subpath.name.endswith('.gz')
         ]
         chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
-        chunks  = _InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+        chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
         # set up the item reader
-        samples = _ChunkedDataIterator(chunks, transform)
+        samples = ChunkedDataIterator(chunks, transform)
         # set up the item randomizer
         if shuffle:
             # use different seed for BufferedShuffleGenerator
             buffered_shuffle_iterator_seed = seed
             if buffered_shuffle_iterator_seed is not None:
                 buffered_shuffle_iterator_seed += 1
-            samples = _BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
+            samples = BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
         
         # this is what we are serving out
         self._iterator = samples
@@ -352,46 +364,109 @@ class ChunkedDatasetIterator(ICheckpointableIterator):
         return next(self._iterator)
 
 
-if __name__ == '__main__':
-    data_size = 10**5
+# However, that may no longer be true with checkpointing, so let's keep it as a class for now.
+class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
+    """
+    Iterates over items from a Dataset and group items of similar length into batches.
 
-    data = NativeCheckpointableIterator(iter(range(data_size)))
-    shuffled_data = _BufferedShuffleIterator(data, 100)
-    not_checkpointed = list(shuffled_data)
+    The algorithm reads a head a certain number of lines (e.g. 10 million), sorts them by
+    length, and them groups them into batches from start to end. The sort is stable, such
+    that prior randomization is not undone (except for the length grouping). The batch size
+    is dynamic, and determined by a user-provided callback.
 
-    data = NativeCheckpointableIterator(iter(range(data_size)))
-    shuffled_data = _BufferedShuffleIterator(data, 100)
-    checkpointed = list(islice(shuffled_data, 10000-10))
+    This is based on Marian NMT's BatchGenerator.
 
-    checkpoint = shuffled_data.__getstate__()
-    data = NativeCheckpointableIterator(iter(range(data_size)))
-    shuffled_data = _BufferedShuffleIterator(data, 100, 42)
-    shuffled_data.__setstate__(checkpoint)
-    checkpointed += list(shuffled_data)
+    Args:
+        dataset: The data set that is read from. Typically this is an infinite source.
+        read_ahead: Number of items to fetch ahead for grouping purposes.
+        key: User-provided callback to define how data is sorted for purpose of batching.
+        batch_size: Batch size in number of items. Either an integer or a callback to determine batch size for a given first batch item.
+        shuffle: Pass False to not randomize the batches. (default: True)
+        seed: Random seed for batch shuffling.
+    """
+    # parameters
+    _key: Callable[[Any], Any]
+    _batch_size: Union[int,Callable[[Any], int]]
+    _read_ahead: int
 
-    assert checkpointed == not_checkpointed
-    print("passed")
+    # state
+    _data_iter: Iterator[Any]   # iterator into _dataset
+    _random: Random             # random generator
+    _dataset_exhausted: bool    # set to True once we hit StopIteration on dataset
+    _batch_iter: Iterator[Any]  # iterator into current set of batches
+    _input_state: NamedTuple    # state of input before reading the current set of batches
+    _num_served: int            # number of batches served from the current set of batches
 
-    # TODO: make this a real test
-    random = Random()
-    for i in range(20):
-        # random sequence lengths to for testing different configurations
-        test_source_length        = random.randrange(5,25)
-        test_first_output_length  = random.randrange(5,25)
-        test_second_output_length = random.randrange(5,25)
-        # source
-        test_source = range(test_source_length)
-        reader = _InfinitePermutationIterator(test_source, seed=i)
-        # fetch a first sequence
-        items0 = list(islice(reader, test_first_output_length))
-        print('items0', items0)
-        # fetch a second sequence
-        checkpoint = reader.__getstate__()
-        items1a = list(islice(reader, test_second_output_length))
-        print('items1a', items1a)
-        # fetch that second sequence again via checkpointing
-        reader.__setstate__(checkpoint)
-        items1b = list(islice(reader, test_second_output_length))
-        print('items1b', items1b)
-        # must be the same
-        assert items1a == items1b
+    def __init__(self, dataset, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: int=None):
+        # keep arguments
+        self._key = key
+        self._batch_size = batch_size
+        self._read_ahead = read_ahead
+        # initialize state
+        if shuffle:
+            self._random = Random()
+            if seed is not None:
+                self._random.seed(seed)
+        self._data_iter = iter(dataset)
+        self.__setstate__(None)
+    
+    def __getstate__(self):
+        return _namedtuple_from(
+            input_state  = self._input_state,
+            random_state = self._random_state,
+            num_served   = self._num_served)
+    
+    def _create_batches(self, items: List[Any]) -> List[List[Any]]:  # helper to form batches from a list of items
+            # sort by length, longest first
+            items.sort(key=self._key, reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
+            # group into batches
+            cur_batch = None
+            batches = []
+            for item in items:
+                if not cur_batch:
+                    batch_size: int = self._batch_size if isinstance(self._batch_size, int) else \
+                                      self._batch_size(item)
+                    cur_batch = []
+                cur_batch.append(item)
+                if len(cur_batch) >= batch_size:  # this batch is full
+                    batches.append(cur_batch)
+                    cur_batch = None
+            if cur_batch:
+                batches.append(cur_batch)
+            return batches
+
+    def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        self._input_state  = checkpoint.input_state  if checkpoint else None
+        self._random_state = checkpoint.random_state if checkpoint else None
+        self._num_served   = checkpoint.num_served   if checkpoint else 0
+        # checkpointing: restore to start of current set of batches
+        self._data_iter.__setstate__(self._input_state)
+        if self._random_state:
+            self._random.setstate(self._random_state)
+        self._dataset_exhausted = False
+        def _generate():
+            skip_to_checkpoint = self._num_served
+            dataset_exhausted = False
+            while not dataset_exhausted:
+                # prefetch the readahead buffer
+                self._input_state = self._data_iter.__getstate__()
+                self._random_state = self._random.getstate() if self._random else None
+                items = list(islice(self._data_iter, self._read_ahead))
+                dataset_exhausted = (len(items) < self._read_ahead)
+                # create batches
+                batches = self._create_batches(items)
+                # shuffle the batches
+                if self._random:
+                    self._random.shuffle(batches)
+                # on first loop iteration, restore iterator inside batches from checkpoint
+                batches = iter(batches)
+                self._num_served = _advance_iterator(batches, skip_to_checkpoint)
+                skip_to_checkpoint = 0
+                # main loop over batches in current read-ahead section
+                for batch in batches:
+                    self._num_served += 1
+                    yield batch
+        self._batch_iter = _generate()
+
+    def __next__(self):
+        return next(self._batch_iter)
