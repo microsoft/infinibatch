@@ -360,7 +360,6 @@ class ChunkedDatasetIterator(CheckpointableIterator):
         return next(self._iterator)
 
 
-# Note: This could be implemented more elegantly as a generator function.
 # However, that may no longer be true with checkpointing, so let's keep it as a class for now.
 class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
     """
