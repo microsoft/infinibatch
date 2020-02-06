@@ -82,17 +82,16 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         self.__setstate__(None)
 
     def __next__(self):
-        item = next(self._iterator)
+        item = next(self._iterator)  # call this before increasing _consumed_items to correctly handle the case when a StopIteration exception is thrown
         self._consumed_items += 1
         return item
 
     def __getstate__(self) -> NamedTuple:
-        return _namedtuple_from(
-            consumed_items = self._consumed_items)
+        return _namedtuple_from(consumed_items=self._consumed_items)
 
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
         self._iterator = iter(self._input_iterable)
-        self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint else 0
+        self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint is not None else 0
 
 
 class InfinitePermutationIterator(CheckpointableIterator):
