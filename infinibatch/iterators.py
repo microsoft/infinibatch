@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
+from collections import namedtuple
 import copy
 import gzip
-from itertools import islice, cycle
-import os, sys
+from itertools import cycle, islice
+import os
 from random import Random
-from typing import Union, Iterable, Iterator, List, Any, Callable, Optional, Generator, NamedTuple
+from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTuple, Optional, Union
 
 
 # GLOBAL TODO:
@@ -30,7 +31,6 @@ def _namedtuple_from(**members):
     Returns:
         A singleton named tuple that has all passed kw args as immutable class members.
     """
-    from collections import namedtuple
     return namedtuple("namedtuple_from", members.keys())(**members)
 
 
