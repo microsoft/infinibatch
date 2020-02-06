@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import copy
 import gzip
 from itertools import islice, cycle
@@ -40,17 +41,20 @@ def _advance_iterator(iterator: Iterator[Any], n: int):
     return n
 
 
-class CheckpointableIterator:
+class CheckpointableIterator(ABC):
     """ Abstract base class for iterators that are checkpointable """
+    @abstractmethod
     def __next__(self):
         raise NotImplementedError()
 
     def __iter__(self):
         return self
 
+    @abstractmethod
     def __getstate__(self) -> NamedTuple:
         raise NotImplementedError()
 
+    @abstractmethod
     def __setstate__(self, checkpoint: Optional[NamedTuple]):
         raise NotImplementedError()
 
