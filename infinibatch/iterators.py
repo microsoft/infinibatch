@@ -130,11 +130,6 @@ class InfinitePermutationIterator(CheckpointableIterator):
         self._num_instances = num_instances
         self._instance_rank = instance_rank
         self.__setstate__(from_checkpoint=None)
-
-    # implementation of Iterator protocol:
-    # This could go into a shared baseclass, although it seems simple enough.
-    def __iter__(self):
-        return self
     
     def __next__(self):
         return next(self._generator)
