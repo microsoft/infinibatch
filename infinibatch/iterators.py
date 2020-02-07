@@ -8,11 +8,14 @@ from random import Random
 from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTuple, Optional, Union
 
 
-# GLOBAL TODO:
+# TODO for first release:
 # - implement new version of BufferedShuffleIterator that has smaller checkpoints
 # - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
 # - modify ChunkedDataIterator to also work on uncompressed data, or even more general data formats
 #    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
+
+# TODO later:
+# - make iterator pipeline work for streaming data
 
 
 def _namedtuple_from(**members):
