@@ -106,23 +106,17 @@ class TestInfinitePermutationIterator(TestBase):
 
 class TestNativeCheckpointableIterator(TestBase):
     def test(self):
-        data_size = 10**5
+        # go half-way through data and create checkpoint
+        it = NativeCheckpointableIterator(list(range(100)))
+        items = list(itertools.islice(it, 50))
+        checkpoint = it.getstate()
 
-        data = NativeCheckpointableIterator(list(range(data_size)))
-        shuffled_data = BufferedShuffleIterator(data, 100)
-        not_checkpointed = list(shuffled_data)
+        # resume from checkpoint
+        it = NativeCheckpointableIterator(list(range(100)))
+        it.setstate(checkpoint)
+        items += list(it)
 
-        data = NativeCheckpointableIterator(list(range(data_size)))
-        shuffled_data = BufferedShuffleIterator(data, 100)
-        checkpointed = list(itertools.islice(shuffled_data, 10000-10))
-
-        checkpoint = shuffled_data.getstate()
-        data = NativeCheckpointableIterator(list(range(data_size)))
-        shuffled_data = BufferedShuffleIterator(data, 100, 42)
-        shuffled_data.setstate(checkpoint)
-        checkpointed += list(shuffled_data)
-
-        self.assertTrue(checkpointed == not_checkpointed)
+        self.assertListEqual(items, list(range(100)))
 
     def test_iterator_exception(self):
         self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
