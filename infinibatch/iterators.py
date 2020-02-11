@@ -284,7 +284,7 @@ class TransformIterator(CheckpointableIterator):
         return self._transform(next(self._input_iterator))
 
 
-def ChunkedDatasetIterator(paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform: Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
+def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform: Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
     """
     Dataset reading data from gzipped chunks.
 
