@@ -77,7 +77,10 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         Warning: This only works with true iterables that reset upon each call to __iter__.
         Iterators have an __iter__ method that simply returns self, but does not reset.
         """
-        if iter(iterable) is iterable:  # check whether iterable is iterable or iterator
+        # check whether iterable is iterable or iterator:
+        # if the variable iterable contains an iterator, the function __iter__ returns self
+        # if the variable iterable is an actual iterator, it should not return self
+        if iter(iterable) is iterable:  
             raise ValueError('It looks like you are passing an iterator instead of an iterable. This is not supported and can cause undefined behavior when used with checkpointing.')
         self._input_iterable = iterable
         self.setstate(None)
