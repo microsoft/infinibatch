@@ -45,12 +45,12 @@ def _advance_iterator(iterator: Iterator, n: int):
 
 
 class CheckpointableIterator(ABC):
-    """
-    Abstract base class for iterators that are checkpointable
-    
-    The interface (getstate, setstate) is inspired by Python's random package.
-    """
     def __iter__(self):
+        """
+        Abstract base class for iterators that are checkpointable
+        
+        The interface (getstate, setstate) is inspired by Python's random package.
+        """
         return self
 
     @abstractmethod
@@ -71,15 +71,15 @@ class CheckpointableIterator(ABC):
 #        advanced since the last call to getstate(). Upon setstate(), we'd
 #        setstate() in the input iterator and then advance only the remaining few.
 class NativeCheckpointableIterator(CheckpointableIterator):
-    """
-    Simple checkpointable wrapper around native Python iterable.
-    This version just replays the iterator all the way to the checkpoint, which will
-    make it inefficient for some important use cases.
-
-    Note: It only works with true iterables that reset upon each call to iter().
-    Iterators have an iter() method but don't reset themselves.
-    """
     def __init__(self, iterable: Iterable):
+        """
+        Simple checkpointable wrapper around native Python iterable.
+        This version just replays the iterator all the way to the checkpoint, which will
+        make it inefficient for some important use cases.
+
+        Note: It only works with true iterables that reset upon each call to iter().
+        Iterators have an iter() method but don't reset themselves.
+        """
         # @BUGBUG: We should check whether the input iterable is really a restartable iterable (and not an fake one such as an iterator)
         self._input_iterable = iterable
         self.setstate(None)
@@ -98,20 +98,20 @@ class NativeCheckpointableIterator(CheckpointableIterator):
 
 
 class InfinitePermutationIterator(CheckpointableIterator):
-    """
-    Infinitely generates permutations of the items in the given iterable.
-
-    Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
-
-    Args:
-        iterator: input iterator
-        seed: random seed used for shuffling (or None)
-        shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
-        num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-        instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-    """
     def __init__(self, items: Iterator, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+        """
+        Infinitely generates permutations of the items in the given iterable.
+
+        Unlike most classes here, this one loads all items into RAM. For example, this is used
+        for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
+
+        Args:
+            iterator: input iterator
+            seed: random seed used for shuffling (or None)
+            shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
+            num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+            instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+        """
         self._original_items = list(items)  # keep a local copy, since items is an iterator
         self._shuffle = shuffle
         self._seed = seed
