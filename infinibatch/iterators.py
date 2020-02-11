@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
-from collections import namedtuple
+from abc import abstractmethod
+import collections
 import copy
 import gzip
 from itertools import cycle, islice
@@ -35,7 +35,7 @@ def _namedtuple_from(**members):
     Returns:
         A singleton named tuple that has all passed kw args as immutable class members.
     """
-    return namedtuple("namedtuple_from", members.keys())(**members)
+    return collections.namedtuple("namedtuple_from", members.keys())(**members)
 
 
 def _advance_iterator(iterator: Iterator, n: int):
@@ -45,7 +45,7 @@ def _advance_iterator(iterator: Iterator, n: int):
     return n
 
 
-class CheckpointableIterator(ABC, Iterator):
+class CheckpointableIterator(collections.abc.Iterator):
     """
     Abstract base class for iterators that are checkpointable
     
