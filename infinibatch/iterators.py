@@ -161,18 +161,15 @@ class InfinitePermutationIterator(CheckpointableIterator):
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-# @TODO: Is it wise to have the transform here? It will increase startup time [Liyang]
 class ChunkedDataIterator(CheckpointableIterator):
-    def __init__(self, chunk_file_paths: CheckpointableIterator, transform: Callable[[str],Any]=None):
+    def __init__(self, chunk_file_paths: CheckpointableIterator):
         """
         Reads data items (text lines) from chunk files. Optionally parses each item with a caller-supplied transform.
 
         Args:
             chunk_file_paths: iterable of paths to chunk files
-            transform: transform to parse each text line (transform(str) -> Any)
         """
         self._chunk_file_paths = chunk_file_paths
-        self._transform = transform
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
@@ -204,10 +201,7 @@ class ChunkedDataIterator(CheckpointableIterator):
         self._iterator = _generate()
 
     def __next__(self):
-        item = next(self._iterator)
-        if self._transform is not None:  # transform is applied on the fly here
-            item = self._transform(item)
-        return item
+        return next(self._iterator)
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
@@ -320,7 +314,7 @@ class ChunkedDatasetIterator(CheckpointableIterator):
         chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
         chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
         # set up the item reader
-        samples = ChunkedDataIterator(chunks, transform)
+        samples = ChunkedDataIterator(chunks)
         # set up the item randomizer
         if shuffle:
             # use different seed for BufferedShuffleGenerator
@@ -329,6 +323,10 @@ class ChunkedDatasetIterator(CheckpointableIterator):
                 buffered_shuffle_iterator_seed += 1
             samples = BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
         
+        # apply transform, if given
+        if transform is not None:
+            samples = TransformIterator(samples, transform)
+
         # this is what we are serving out
         self._iterator = samples
         self.setstate(None)
