@@ -206,10 +206,10 @@ class BufferedShuffleIterator(CheckpointableIterator):
         """
         Shuffles given iterable using a limited buffer.
         
-        Arguments:
-        input_iterator -- checkpointable iterator or restartable iterable over input items to shuffle
-        buffer_size -- size of the buffer in number of items used for shuffling
-        seed -- random seed used for shuffling (or None)
+        Args:
+            input_iterator: checkpointable iterator or restartable iterable over input items to shuffle
+            buffer_size: size of the buffer in number of items used for shuffling
+            seed: random seed used for shuffling (or None)
         """
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
@@ -265,8 +265,8 @@ class TransformIterator(CheckpointableIterator):
         Applies given tranform to each data item
         
         Args:
-        input_iterator -- checkpointable iterator
-        transform -- function to be applied to each data item
+            input_iterator: checkpointable iterator
+            transform: function to be applied to each data item
         """
         self._input_iterator = input_iterator
         self._transform = transform
@@ -289,14 +289,14 @@ class ChunkedDatasetIterator(CheckpointableIterator):
 
         This dataset infinitely repeats the data.
 
-        Arguments:
-        paths -- path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
-        shuffle -- if true, the data is shuffled
-        buffer_size -- size of the buffer in number of samples / data items used for shuffling
-        transform -- transform to be applied to each data item (transform(Any) -> Any)
-        seed -- random seed (or None)
-        num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-        instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+        Args:
+            paths: path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
+            shuffle: if true, the data is shuffled
+            buffer_size: size of the buffer in number of samples / data items used for shuffling
+            transform: transform to be applied to each data item (transform(Any) -> Any)
+            seed: random seed (or None)
+            num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+            instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
