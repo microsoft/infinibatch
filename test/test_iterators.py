@@ -7,7 +7,7 @@ import tempfile
 from typing import Iterable, Iterator, Any
 import unittest
 
-from infinibatch.iterators import ChunkedDatasetIterator, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator
+from infinibatch.iterators import ChunkedDatasetIterator, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
 
 
 class TestBase(unittest.TestCase):
@@ -177,6 +177,12 @@ class TestBufferedShuffleIterator(TestBase):
     def test_shuffle_buffer_size_one(self):
         items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
+
+
+class TestTransformIterator(TestBase):
+    def test_transform(self):
+        items = list(TransformIterator(NativeCheckpointableIterator(range(100)), lambda x: x + 1))
+        self.assertListEqual(items, list(range(1, 101)))
 
 
 class TestChunkedDatasetIterator(TestBase):

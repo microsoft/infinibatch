@@ -268,6 +268,29 @@ class BufferedShuffleIterator(CheckpointableIterator):
         return next(self._generator)
 
 
+class TransformIterator(CheckpointableIterator):
+    def __init__(self, input_iterator: CheckpointableIterator, transform: Callable[[str],Any]=None):
+        """
+        Applies given tranform to each data item
+        
+        Args:
+        input_iterator -- checkpointable iterator
+        transform -- function to be applied to each data item
+        """
+        self._input_iterator = input_iterator
+        self._transform = transform
+        self.setstate(None)
+
+    def getstate(self) -> NamedTuple:
+        return self._input_iterator.getstate()
+
+    def setstate(self, checkpoint: Optional[NamedTuple]):
+        self._input_iterator.setstate(checkpoint)
+
+    def __next__(self):
+        return self._transform(next(self._input_iterator))
+        
+
 # @TODO: This is no more than a factory function. We should change it to one
 class ChunkedDatasetIterator(CheckpointableIterator):
     def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform: Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
