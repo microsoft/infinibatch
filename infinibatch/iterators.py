@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTupl
 # - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
 # - modify ChunkedDataIterator to also work on uncompressed data, or even more general data formats
 #    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
+# - add type checks to guarantee that input iterators are checkpointable?
 
 # TODO later:
 # - make iterator pipeline work for streaming data
