@@ -273,7 +273,6 @@ class TransformIterator(CheckpointableIterator):
         """
         self._input_iterator = input_iterator
         self._transform = transform
-        self.setstate(None)
 
     def getstate(self) -> NamedTuple:
         return self._input_iterator.getstate()
