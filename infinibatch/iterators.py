@@ -164,7 +164,7 @@ class InfinitePermutationIterator(CheckpointableIterator):
 class ChunkedDataIterator(CheckpointableIterator):
     def __init__(self, chunk_file_paths: CheckpointableIterator):
         """
-        Reads data items (text lines) from chunk files. Optionally parses each item with a caller-supplied transform.
+        Reads data items (text lines) from chunk files.
 
         Args:
             chunk_file_paths: iterable of paths to chunk files
