@@ -163,7 +163,7 @@ class InfinitePermutationIterator(CheckpointableIterator):
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
 # @TODO: Is it wise to have the transform here? It will increase startup time [Liyang]
 class ChunkedDataIterator(CheckpointableIterator):
-    def __init__(self, chunk_file_paths: Iterator[str], transform: Callable[[str],Any]=None):
+    def __init__(self, chunk_file_paths: CheckpointableIterator, transform: Callable[[str],Any]=None):
         """
         Reads data items (text lines) from chunk files. Optionally parses each item with a caller-supplied transform.
 
@@ -171,8 +171,6 @@ class ChunkedDataIterator(CheckpointableIterator):
             chunk_file_paths: iterable of paths to chunk files
             transform: transform to parse each text line (transform(str) -> Any)
         """
-        if not isinstance(chunk_file_paths, CheckpointableIterator):
-            chunk_file_paths = NativeCheckpointableIterator(chunk_file_paths)
         self._chunk_file_paths = chunk_file_paths
         self._transform = transform
         self.setstate(None)
@@ -213,7 +211,7 @@ class ChunkedDataIterator(CheckpointableIterator):
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
-    def __init__(self, input_iterator: Union[CheckpointableIterator,Iterable], buffer_size: int, seed: int = 0):
+    def __init__(self, input_iterator: CheckpointableIterator, buffer_size: int, seed: int = 0):
         """
         Shuffles given iterable using a limited buffer.
         
@@ -222,8 +220,6 @@ class BufferedShuffleIterator(CheckpointableIterator):
         buffer_size -- size of the buffer in number of items used for shuffling
         seed -- random seed used for shuffling (or None)
         """
-        if not isinstance(input_iterator, CheckpointableIterator):  # @TODO: factor this into a helper method
-            input_iterator = NativeCheckpointableIterator(input_iterator)
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)

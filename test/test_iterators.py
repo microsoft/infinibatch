@@ -127,7 +127,7 @@ class TestNativeCheckpointableIterator(TestBase):
 
 class TestChunkedDataIterator(TestBase):    
     def test(self):
-        items = list(ChunkedDataIterator(self.chunk_file_paths))
+        items = list(ChunkedDataIterator(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -143,8 +143,8 @@ class TestChunkedDataIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataIterator([lf_file]))
-        crlf_dat = list(ChunkedDataIterator([crlf_file]))
+        lf_data = list(ChunkedDataIterator(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(ChunkedDataIterator(NativeCheckpointableIterator([crlf_file])))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -171,11 +171,11 @@ class TestChunkedDataIterator(TestBase):
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))  # @TODO: why the copy? the data is a list
+        items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))  # @TODO: why the copy? the data is a list
         self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
+        items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
 
 
