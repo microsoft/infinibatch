@@ -74,7 +74,7 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         This version just replays the iterator all the way to the checkpoint, which will
         make it inefficient for some important use cases.
 
-        Warning: This only works with true iterables that reset upon each call to __iter__.
+        Warning: This only works with true Iterables that reset upon each call to __iter__.
         Iterators have an __iter__ method that simply returns self, but does not reset.
         """
         # check whether iterable is iterable or iterator:
