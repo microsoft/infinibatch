@@ -7,7 +7,8 @@ import tempfile
 from typing import Iterable, Iterator, Any
 import unittest
 
-from infinibatch.iterators import chunked_dataset_iterator, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
+from infinibatch.iterators import InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
+from infinibatch.datasets import chunked_dataset_iterator
 
 
 class TestBase(unittest.TestCase):

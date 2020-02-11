@@ -7,7 +7,7 @@
 import os, sys, inspect
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))))  # find our imports
 
-from infinibatch.common.chunked_dataset import chunked_dataset_iterator
+from infinibatch.datasets import chunked_dataset_iterator
 
 sets = sys.argv[1:]
 
