@@ -7,7 +7,7 @@ import tempfile
 from typing import Iterable, Iterator, Any
 import unittest
 
-from infinibatch.iterators import ChunkedDatasetIterator, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator
+from infinibatch.iterators import ChunkedDatasetIterator, InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
 
 
 class TestBase(unittest.TestCase):
@@ -106,28 +106,25 @@ class TestInfinitePermutationIterator(TestBase):
 
 class TestNativeCheckpointableIterator(TestBase):
     def test(self):
-        data_size = 10**5
+        # go half-way through data and create checkpoint
+        it = NativeCheckpointableIterator(list(range(100)))
+        items = list(itertools.islice(it, 50))
+        checkpoint = it.getstate()
 
-        data = NativeCheckpointableIterator(iter(range(data_size)))
-        shuffled_data = BufferedShuffleIterator(data, 100)
-        not_checkpointed = list(shuffled_data)
+        # resume from checkpoint
+        it = NativeCheckpointableIterator(list(range(100)))
+        it.setstate(checkpoint)
+        items += list(it)
 
-        data = NativeCheckpointableIterator(iter(range(data_size)))
-        shuffled_data = BufferedShuffleIterator(data, 100)
-        checkpointed = list(itertools.islice(shuffled_data, 10000-10))
+        self.assertListEqual(items, list(range(100)))
 
-        checkpoint = shuffled_data.getstate()
-        data = NativeCheckpointableIterator(iter(range(data_size)))
-        shuffled_data = BufferedShuffleIterator(data, 100, 42)
-        shuffled_data.setstate(checkpoint)
-        checkpointed += list(shuffled_data)
-
-        self.assertTrue(checkpointed == not_checkpointed)
+    def test_iterator_exception(self):
+        self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
 
 
 class TestChunkedDataIterator(TestBase):    
     def test(self):
-        items = list(ChunkedDataIterator(self.chunk_file_paths))
+        items = list(ChunkedDataIterator(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -143,8 +140,8 @@ class TestChunkedDataIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataIterator([lf_file]))
-        crlf_dat = list(ChunkedDataIterator([crlf_file]))
+        lf_data = list(ChunkedDataIterator(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(ChunkedDataIterator(NativeCheckpointableIterator([crlf_file])))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -171,12 +168,20 @@ class TestChunkedDataIterator(TestBase):
 
 class TestBufferedShuffleIterator(TestBase):
     def test_shuffle(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 971, 42))  # @TODO: why the copy? the data is a list
+        # work on copy of data in case data is modified by class
+        items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
-        items = list(BufferedShuffleIterator(self.flattened_test_data.copy(), 1, 42))
+        # work on copy of data in case data is modified by class
+        items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
+
+
+class TestTransformIterator(TestBase):
+    def test_transform(self):
+        items = list(TransformIterator(NativeCheckpointableIterator(range(100)), lambda x: x + 1))
+        self.assertListEqual(items, list(range(1, 101)))
 
 
 class TestChunkedDatasetIterator(TestBase):

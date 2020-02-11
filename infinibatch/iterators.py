@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTupl
 # - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
 # - modify ChunkedDataIterator to also work on uncompressed data, or even more general data formats
 #    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
+# - add type checks to guarantee that input iterators are checkpointable?
 
 # TODO later:
 # - make iterator pipeline work for streaming data
@@ -37,14 +38,14 @@ def _namedtuple_from(**members):
     return namedtuple("namedtuple_from", members.keys())(**members)
 
 
-def _advance_iterator(iterator: Iterator[Any], n: int):
+def _advance_iterator(iterator: Iterator, n: int):
     """ Little helper to advance an iterator by n items """
     for _ in range(n):
         next(iterator)
     return n
 
 
-class CheckpointableIterator(ABC):
+class CheckpointableIterator(ABC, Iterator):
     """
     Abstract base class for iterators that are checkpointable
     
@@ -66,25 +67,20 @@ class CheckpointableIterator(ABC):
         pass
 
 
-# @TODO: Can we have one that also takes an input iterator?
-#        Then getstate() can inquire that one, and remember how often we have
-#        advanced since the last call to getstate(). Upon setstate(), we'd
-#        setstate() in the input iterator and then advance only the remaining few.
 class NativeCheckpointableIterator(CheckpointableIterator):
-    """
-    Simple checkpointable wrapper around native Python iterable.
-    This version just replays the iterator all the way to the checkpoint, which will
-    make it inefficient for some important use cases.
+    def __init__(self, iterable: Iterable):
+        """
+        Simple checkpointable wrapper around native Python iterable.
+        This version just replays the iterator all the way to the checkpoint, which will
+        make it inefficient for some important use cases.
 
-    Note: It only works with true iterables that reset upon each call to iter().
-    Iterators have an iter() method but don't reset themselves.
-    """
-    _input_iterable: Iterable[Any]
-    _iterator: Iterator[Any]
-    _consumed_items: int
-
-    def __init__(self, iterable: Iterable[Any]):
-        # @BUGBUG: We should check whether the input iterable is really a restartable iterable (and not an fake one such as an iterator)
+        Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an __iter__ function that simply returns self, but does not reset.
+        """
+        # check whether iterable is iterable or iterator:
+        # if the variable iterable contains an iterator, the function __iter__ returns self
+        # if the variable iterable is an actual iterator, it should not return self
+        if iter(iterable) is iterable:  
+            raise ValueError('It looks like you are passing an iterator instead of an iterable. This is not supported and can cause undefined behavior when used with checkpointing.')
         self._input_iterable = iterable
         self.setstate(None)
 
@@ -102,54 +98,39 @@ class NativeCheckpointableIterator(CheckpointableIterator):
 
 
 class InfinitePermutationIterator(CheckpointableIterator):
-    """
-    Infinitely generates permutations of the items in the given iterable.
+    def __init__(self, items: Iterator, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+        """
+        Infinitely generates permutations of the items in the given iterable.
 
-    Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
+        Unlike most classes here, this one loads all items into RAM. For example, this is used
+        for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
 
-    Args:
-        iterator: input iterator
-        seed: random seed used for shuffling (or None)
-        shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
-        num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-        instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-    """
-    # constructor arguments
-    _original_items: List[Any]  # note: in this case, the source iterator is not checkpointable, hence we must instead keep a full copy
-    _seed: Optional[int]
-    _shuffle: bool
-    _num_instances: int
-    _instance_rank: int
-
-    # output iterator that generates our output sequence
-    _generator: Iterator[Any]
-
-    # iteration state. This is returned when requesting the checkpoint, and restored when resetting to checkpoint.
-    _random_state: Any
-    _item_count: int
-
-    def __init__(self, items: Iterator[Any], seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
-        # keep arguments for iter_from_checkpoint
+        Args:
+            iterator: input iterator
+            seed: random seed used for shuffling (or None)
+            shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
+            num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+            instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+        """
         self._original_items = list(items)  # keep a local copy, since items is an iterator
         self._shuffle = shuffle
         self._seed = seed
         self._num_instances = num_instances
         self._instance_rank = instance_rank
-        self.setstate(from_checkpoint=None)
+        self.setstate(None)
 
     def getstate(self) -> NamedTuple:
         return _namedtuple_from(
             random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
             item_count   = self._item_count)    # how many items have already been iterated over in the current shuffling
 
-    def setstate(self, from_checkpoint: Optional[NamedTuple]):
+    def setstate(self, checkpoint: Optional[NamedTuple]):
         # set iteration state. Do this outside the generator below in case getstate() is called before ever iterating
-        self._random_state = from_checkpoint.random_state if from_checkpoint else None
-        self._item_count   = from_checkpoint.item_count   if from_checkpoint else 0
+        self._random_state = checkpoint.random_state if checkpoint else None
+        self._item_count   = checkpoint.item_count   if checkpoint else 0
         # We define the iteration itself as a generator for ease of implementation.
         # We could as well just have used an explicit state machine represented by class members.
-        def _generate():
+        def _generate() -> Iterator:
             # create and reset random generator
             random = Random(self._seed)
             if self._random_state is not None:  # restore the random generator's state
@@ -160,7 +141,7 @@ class InfinitePermutationIterator(CheckpointableIterator):
                 # (re-)shuffle all items
                 self._random_state = random.getstate()  # remember random state before shuffling
                 self._item_count   = 0
-                shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use setstate(from_checkpoint.nested_state) on it
+                shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use setstate(checkpoint.nested_state) on it
                 if self._shuffle:
                     random.shuffle(shuffled_items)
                 shuffled_iterator = iter(shuffled_items)
@@ -180,30 +161,15 @@ class InfinitePermutationIterator(CheckpointableIterator):
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-# @TODO: Support non-gzipped files as well
-# @TODO: Is it wise to have the transform here? It will increase startup time [Liyang]
-# @TODO: Shoult the splitlines() below also be passable as a lambda? Then we could read binary files. Maybe combine with transform?
 class ChunkedDataIterator(CheckpointableIterator):
-    _chunk_file_paths: Iterator[str]
-    _transform: Callable[[str],Any]
-
-    _iterator: Iterator[Any]
-
-    _input_state: Union[Optional[Any], int]
-    _line_index: int
-
-    def __init__(self, chunk_file_paths: Iterator[str], transform: Callable[[str],Any]=None):
+    def __init__(self, chunk_file_paths: CheckpointableIterator):
         """
-        Reads data items (text lines) from chunk files. Optionally parses each item with a caller-supplied transform.
+        Reads data items (text lines) from chunk files.
 
         Args:
             chunk_file_paths: iterable of paths to chunk files
-            transform: transform to parse each text line (transform(str) -> Any)
         """
-        if not isinstance(chunk_file_paths, CheckpointableIterator):
-            chunk_file_paths = NativeCheckpointableIterator(chunk_file_paths)
         self._chunk_file_paths = chunk_file_paths
-        self._transform = transform
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
@@ -235,29 +201,19 @@ class ChunkedDataIterator(CheckpointableIterator):
         self._iterator = _generate()
 
     def __next__(self):
-        item = next(self._iterator)
-        if self._transform is not None:  # transform is applied on the fly here
-            item = self._transform(item)
-        return item
+        return next(self._iterator)
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
-    _input_iterator: Iterator[Any]
-    _buffer: List[Optional[Any]]
-    _random: Random
-    _generator: Iterator[Any]
-
-    def __init__(self, input_iterator: Union[CheckpointableIterator,Iterable[Any]], buffer_size: int, seed: int = 0):
+    def __init__(self, input_iterator: CheckpointableIterator, buffer_size: int, seed: int = 0):
         """
         Shuffles given iterable using a limited buffer.
         
-        Arguments:
-        input_iterator -- checkpointable iterator or restartable iterable over input items to shuffle
-        buffer_size -- size of the buffer in number of items used for shuffling
-        seed -- random seed used for shuffling (or None)
+        Args:
+            input_iterator: checkpointable iterator or restartable iterable over input items to shuffle
+            buffer_size: size of the buffer in number of items used for shuffling
+            seed: random seed used for shuffling (or None)
         """
-        if not isinstance(input_iterator, CheckpointableIterator):  # @TODO: factor this into a helper method
-            input_iterator = NativeCheckpointableIterator(input_iterator)
         self._input_iterator = input_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
@@ -306,26 +262,44 @@ class BufferedShuffleIterator(CheckpointableIterator):
         return next(self._generator)
 
 
-# @TODO: Support non-zipped files.
-# @TODO: Support index files?
+class TransformIterator(CheckpointableIterator):
+    def __init__(self, input_iterator: CheckpointableIterator, transform: Callable[[str],Any]=None):
+        """
+        Applies given tranform to each data item
+        
+        Args:
+            input_iterator: checkpointable iterator
+            transform: function to be applied to each data item
+        """
+        self._input_iterator = input_iterator
+        self._transform = transform
+
+    def getstate(self) -> NamedTuple:
+        return self._input_iterator.getstate()
+
+    def setstate(self, checkpoint: Optional[NamedTuple]):
+        self._input_iterator.setstate(checkpoint)
+
+    def __next__(self):
+        return self._transform(next(self._input_iterator))
+        
+
 # @TODO: This is no more than a factory function. We should change it to one
 class ChunkedDatasetIterator(CheckpointableIterator):
-    _iterator: Iterator[Any]  # our output iterator
-
-    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform:Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
+    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform: Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
         """
         Dataset reading data from gzipped chunks.
 
         This dataset infinitely repeats the data.
 
-        Arguments:
-        paths -- path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
-        shuffle -- if true, the data is shuffled
-        buffer_size -- size of the buffer in number of samples / data items used for shuffling
-        transform -- transform to be applied to each data item (transform(Any) -> Any)
-        seed -- random seed (or None)
-        num_instances -- number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-        instance_rank -- rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+        Args:
+            paths: path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
+            shuffle: if true, the data is shuffled
+            buffer_size: size of the buffer in number of samples / data items used for shuffling
+            transform: transform to be applied to each data item (transform(Any) -> Any)
+            seed: random seed (or None)
+            num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+            instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         """
         if isinstance(paths, str):  # handle single string
             paths = [paths]
@@ -339,7 +313,7 @@ class ChunkedDatasetIterator(CheckpointableIterator):
         chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
         chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
         # set up the item reader
-        samples = ChunkedDataIterator(chunks, transform)
+        samples = ChunkedDataIterator(chunks)
         # set up the item randomizer
         if shuffle:
             # use different seed for BufferedShuffleGenerator
@@ -348,6 +322,10 @@ class ChunkedDatasetIterator(CheckpointableIterator):
                 buffered_shuffle_iterator_seed += 1
             samples = BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
         
+        # apply transform, if given
+        if transform is not None:
+            samples = TransformIterator(samples, transform)
+
         # this is what we are serving out
         self._iterator = samples
         self.setstate(None)
