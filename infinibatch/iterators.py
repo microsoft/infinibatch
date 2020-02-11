@@ -46,13 +46,13 @@ def _advance_iterator(iterator: Iterator, n: int):
 
 
 class CheckpointableIterator(ABC, Iterator):
+    """
+    Abstract base class for iterators that are checkpointable
+    
+    The interface (getstate, setstate) is inspired by Python's random package.
+    """
     def __iter__(self):
-        """
-        Abstract base class for iterators that are checkpointable
-        
-        The interface (getstate, setstate) is inspired by Python's random package.
-        """
-        pass
+        return self
 
     @abstractmethod
     def getstate(self) -> NamedTuple:
