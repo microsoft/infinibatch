@@ -108,21 +108,24 @@ class TestNativeCheckpointableIterator(TestBase):
     def test(self):
         data_size = 10**5
 
-        data = NativeCheckpointableIterator(iter(range(data_size)))
+        data = NativeCheckpointableIterator(list(range(data_size)))
         shuffled_data = BufferedShuffleIterator(data, 100)
         not_checkpointed = list(shuffled_data)
 
-        data = NativeCheckpointableIterator(iter(range(data_size)))
+        data = NativeCheckpointableIterator(list(range(data_size)))
         shuffled_data = BufferedShuffleIterator(data, 100)
         checkpointed = list(itertools.islice(shuffled_data, 10000-10))
 
         checkpoint = shuffled_data.getstate()
-        data = NativeCheckpointableIterator(iter(range(data_size)))
+        data = NativeCheckpointableIterator(list(range(data_size)))
         shuffled_data = BufferedShuffleIterator(data, 100, 42)
         shuffled_data.setstate(checkpoint)
         checkpointed += list(shuffled_data)
 
         self.assertTrue(checkpointed == not_checkpointed)
+
+    def test_iterator_exception(self):
+        self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
 
 
 class TestChunkedDataIterator(TestBase):    

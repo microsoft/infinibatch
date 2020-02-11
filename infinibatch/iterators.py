@@ -66,10 +66,6 @@ class CheckpointableIterator(ABC):
         pass
 
 
-# @TODO: Can we have one that also takes an input iterator?
-#        Then getstate() can inquire that one, and remember how often we have
-#        advanced since the last call to getstate(). Upon setstate(), we'd
-#        setstate() in the input iterator and then advance only the remaining few.
 class NativeCheckpointableIterator(CheckpointableIterator):
     def __init__(self, iterable: Iterable):
         """
@@ -77,10 +73,11 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         This version just replays the iterator all the way to the checkpoint, which will
         make it inefficient for some important use cases.
 
-        Note: It only works with true iterables that reset upon each call to iter().
-        Iterators have an iter() method but don't reset themselves.
+        Warning: This only works with true iterables that reset upon each call to __iter__.
+        Iterators have an __iter__ method that simply returns self, but does not reset.
         """
-        # @BUGBUG: We should check whether the input iterable is really a restartable iterable (and not an fake one such as an iterator)
+        if iter(iterable) is iterable:  # check whether iterable is iterable or iterator
+            raise ValueError('It looks like you are passing an iterator instead of an iterable. This is not supported and can cause undefined behavior when used with checkpointing.')
         self._input_iterable = iterable
         self.setstate(None)
 
