@@ -5,7 +5,7 @@ import gzip
 from itertools import cycle, islice
 import os
 from random import Random
-from typing import Any, Callable, Iterable, Iterator, Generator, List, Deque, NamedTuple, Optional, Union
+from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTuple, Optional, Union
 
 
 # TODO for first release:
@@ -343,23 +343,29 @@ class SlidingWindowIterator(CheckpointableIterator):
         """
         self._source: CheckpointableIterator = source
         self._width: int = width
-        self._fifo: Deque = collections.deque(maxlen=width)
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        raise NotImplementedError
+        raise NotImplementedError  # @TODO
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         self._generator = self._generate()
 
+    def _fifo_slice(self, i):
+        # @TODO: for efficiency, make this a slice view
+        return tuple(self._fifo[i:i + self._width])
+
     def _generate(self) -> Iterator:
-        self._fifo.extend(islice(self._source, self._width))
-        if len(self._fifo) != self._width:  # source too short
-            raise StopIteration
-        for item in self._source:
-            yield tuple(self._fifo)
-            self._fifo.append(item)  # note: due to maxlen, this will automatically drop the oldest item
-        yield tuple(self._fifo)  # very last item
+        self._fifo = list(islice(self._source, self._width))
+        # we do this in overlapping blocks of length 2*width, for easier checkpointing and potential efficiency
+        while len(self._fifo) == self._width:
+            # we got 'width' items; append another 'width' (or less if at end)
+            self._fifo.extend(islice(self._source, self._width))
+            # now serve all positions in first half (or less if at end)
+            last = min(self._width - 1, len(self._fifo) - self._width)
+            for i in range(last + 1):
+                yield self._fifo_slice(i)
+            self._fifo = self._fifo[last + 1:]  # drop all we just served; if < width left, we have hit the end
 
     def __next__(self):
         return next(self._generator)

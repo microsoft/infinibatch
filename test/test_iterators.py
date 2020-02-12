@@ -204,11 +204,15 @@ class TestZipIterator(TestBase):
 
 class TestSlidingWindowIterator(TestBase):
     def test(self):
-        seq = [1, 2, 3, 4, 5, 6]
-        it = SlidingWindowIterator(NativeCheckpointableIterator(seq), 3)
-        actual = list(it)
-        expected = [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
-        self.assertListEqual(actual, expected)
+        for max in [0, 2, 3, 8, 9, 10, 11, 12]:  # cover boundary conditions
+            seq = list(range(max))
+            #print('seq', seq)
+            it = SlidingWindowIterator(NativeCheckpointableIterator(seq), 3)
+            actual = list(it)
+            expected = list(zip(seq, itertools.islice(seq, 1, None), itertools.islice(seq, 2, None)))
+            #print('win', actual)
+            #print('expected', expected)
+            self.assertListEqual(actual, expected)
 
 
 class Testchunked_dataset_iterator(TestBase):
