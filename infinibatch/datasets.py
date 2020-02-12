@@ -1,4 +1,4 @@
-from .iterators import InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, TransformIterator
+from .iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, TransformIterator
 from typing import Union, Iterable, Callable, Any, Optional
 import os
 
@@ -34,7 +34,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
     chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
     chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
-    samples = ChunkedDataIterator(chunks)
+    samples = chunked_readlines_iterator(chunks)
     # set up the item randomizer
     if shuffle:
         # use different seed for BufferedShuffleGenerator

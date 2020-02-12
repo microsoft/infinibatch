@@ -7,7 +7,7 @@ import tempfile
 from typing import Iterable, Iterator, Any
 import unittest
 
-from infinibatch.iterators import InfinitePermutationIterator, ChunkedDataIterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
+from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -123,9 +123,9 @@ class TestNativeCheckpointableIterator(TestBase):
         self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
 
 
-class TestChunkedDataIterator(TestBase):    
+class Testchunked_readlines_iterator(TestBase):    
     def test(self):
-        items = list(ChunkedDataIterator(NativeCheckpointableIterator(self.chunk_file_paths)))
+        items = list(chunked_readlines_iterator(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -141,8 +141,8 @@ class TestChunkedDataIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedDataIterator(NativeCheckpointableIterator([lf_file])))
-        crlf_dat = list(ChunkedDataIterator(NativeCheckpointableIterator([crlf_file])))
+        lf_data = list(chunked_readlines_iterator(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(chunked_readlines_iterator(NativeCheckpointableIterator([crlf_file])))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -155,7 +155,7 @@ class TestChunkedDataIterator(TestBase):
         for _ in range(5):
             first_length = random.randrange(11,31)
             extra_length = random.randrange(11,33)
-            dataset = ChunkedDataIterator(chunk_file_paths)
+            dataset = chunked_readlines_iterator(chunk_file_paths)
             for _ in range(first_length):
                 next(dataset)
             checkpoint = dataset.getstate()

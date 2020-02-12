@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTupl
 # TODO for first release:
 # - implement new version of BufferedShuffleIterator that has smaller checkpoints
 # - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
-# - modify ChunkedDataIterator to also work on uncompressed data, or even more general data formats
+# - modify chunked_readlines_iterator to also work on uncompressed data, or even more general data formats
 #    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
 # - add type checks to guarantee that input iterators are checkpointable?
 
@@ -103,7 +103,7 @@ class InfinitePermutationIterator(CheckpointableIterator):
         Infinitely generates permutations of the items in the given iterable.
 
         Unlike most classes here, this one loads all items into RAM. For example, this is used
-        for randomizing the pathnames of data blocks read by _ChunkedDataIterator.
+        for randomizing the pathnames of data blocks read by chunked_readlines_iterator.
 
         Args:
             iterator: input iterator
@@ -160,48 +160,61 @@ class InfinitePermutationIterator(CheckpointableIterator):
         return next(self._generator)
 
 
-# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-class ChunkedDataIterator(CheckpointableIterator):
-    def __init__(self, chunk_file_paths: CheckpointableIterator):
+class SelectManyIterator(CheckpointableIterator):
+    def __init__(self, source_items: CheckpointableIterator, collection_selector: Callable[[Any], Iterable]):
         """
-        Reads data items (text lines) from chunk files.
+        Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
 
         Args:
-            chunk_file_paths: iterable of paths to chunk files
+            source_items: iterable of paths to chunk files
         """
-        self._chunk_file_paths = chunk_file_paths
+        self._source_items: CheckpointableIterator = source_items
+        self._collection_selector: Callable[[Any], Iterable] = collection_selector
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
         return _namedtuple_from(
             nested_state = self._input_state,
-            line_index   = self._line_index)
+            item_index   = self._flattened_item_index)
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         self._input_state = checkpoint.nested_state if checkpoint else None
-        self._line_index  = checkpoint.line_index   if checkpoint else 0
-        self._chunk_file_paths.setstate(self._input_state)
+        self._flattened_item_index  = checkpoint.item_index   if checkpoint else 0
+        self._source_items.setstate(self._input_state)
         def _generate():
-            skip_to_checkpoint = self._line_index
-            # main loop over chunk files
-            for chunk_file_path in self._chunk_file_paths:
-                #print("Reading chunk file", chunk_file_path, file=sys.stderr)
-                with gzip.open(chunk_file_path, 'rt', encoding='utf-8') as f:
-                    data = iter(f.read().splitlines())
-                self._line_index = 0
+            skip_to_checkpoint = self._flattened_item_index
+            # main loop over source source_items
+            for source_item in self._source_items:
+                data = self._collection_selector(source_item)
+                self._flattened_item_index = 0
                 if skip_to_checkpoint:
                     #print("Skipping to index", skip_to_checkpoint, file=sys.stderr)
-                    self._line_index += _advance_iterator(data, skip_to_checkpoint)
+                    self._flattened_item_index += _advance_iterator(data, skip_to_checkpoint)
                     skip_to_checkpoint = 0
                 # main loop over lines
                 for item in data:
-                    self._line_index += 1
+                    self._flattened_item_index += 1
                     yield item
-                self._input_state = self._chunk_file_paths.getstate()
+                self._input_state = self._source_items.getstate()
         self._iterator = _generate()
 
     def __next__(self):
         return next(self._iterator)
+
+
+# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
+def chunked_readlines_iterator(chunk_file_paths: CheckpointableIterator):
+    """
+    Reads text lines from zipped chunk files whose names are provided by an iterator.
+
+    Args:
+        chunk_file_paths: CheckpointableIterator of paths to chunk files
+    """
+    def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
+        #print("Reading chunk file", textfile_path, file=sys.stderr)
+        with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
+            return iter(f.read().splitlines())
+    return SelectManyIterator(source_items=chunk_file_paths, collection_selector=readlines_from_zipped)
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
