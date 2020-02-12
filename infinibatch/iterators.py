@@ -8,12 +8,32 @@ from random import Random
 from typing import Any, Callable, Iterable, Iterator, Generator, List, Tuple, NamedTuple, Optional, Union
 
 
-# TODO for first release:
-# - implement new version of BufferedShuffleIterator that has smaller checkpoints
-# - implement prefetching with a buffer (possibly at the end of the pipeline) to avoid latency spikes
-# - modify chunked_readlines_iterator to also work on uncompressed data, or even more general data formats
-#    - one possible design is to replace the hard-coded "gzip.open ... lines.split" with a lambda passed to the constructor
-# - add type checks to guarantee that input iterators are checkpointable?
+"""
+infinibatch -- A library of checkpointable iterators for randomized data loading of massive data sets
+in deep-neural-network training.
+
+Features:
+
+  * support for corpora much larger than fit into RAM
+  * hierarchical block+sentence-level randomization over the whole corpus, different randomization in each epoch
+  * only load the data that is needed
+  * very fast start-up time (does not need to read full corpus)
+  * only requires the most basic of data preparation (e.g. no indexing)
+  * for multi-GPU, only load what the respective GPU needs
+  * 100% accurate check-pointing, restore from checkpoint should not read all data up to the checkpoint
+  * support automatic bucketed batching with dynamic batch sizes
+  * pre-fetching thread
+  * composable, as to support for complex batching, e.g. negative samples from multiple documents
+
+@TODO: The pre-fetching thread is not supported yet.
+"""
+
+
+# TODO for next release:
+#  - implement prefetching thread (possibly at the end of the pipeline) to avoid latency spikes
+#  - implement new version of BufferedShuffleIterator that has smaller checkpoints
+#  - modify chunked_readlines_iterator to also work on uncompressed data, or even more general data formats
+#  - add type checks to guarantee that input iterators are checkpointable
 
 # TODO later:
 # - make iterator pipeline work for streaming data
@@ -74,14 +94,14 @@ class CheckpointableIterator(collections.abc.Iterator):
 
 
 class NativeCheckpointableIterator(CheckpointableIterator):
-    def __init__(self, iterable: Iterable):
-        """
-        Simple checkpointable wrapper around native Python iterable.
-        This version just replays the iterator all the way to the checkpoint, which will
-        make it inefficient for some important use cases.
+    """
+    Simple checkpointable wrapper around native Python iterable.
+    This version just replays the iterator all the way to the checkpoint, which will
+    make it inefficient for some important use cases.
 
-        Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an __iter__ function that simply returns self, but does not reset.
-        """
+    Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an __iter__ function that simply returns self, but does not reset.
+    """
+    def __init__(self, iterable: Iterable):
         # check whether iterable is iterable or iterator:
         # if the variable iterable contains an iterator, the function __iter__ returns self
         # if the variable iterable is an actual iterator, it should not return self
@@ -104,13 +124,14 @@ class NativeCheckpointableIterator(CheckpointableIterator):
 
 
 class InfinitePermutationIterator(CheckpointableIterator):
+    """
+    Infinitely generates permutations of the items in the given iterable.
+
+    Unlike most classes here, this one loads all items into RAM. For example, this is used
+    for randomizing the pathnames of data blocks read by chunked_readlines_iterator.
+    """
     def __init__(self, items: Iterator, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
-        Infinitely generates permutations of the items in the given iterable.
-
-        Unlike most classes here, this one loads all items into RAM. For example, this is used
-        for randomizing the pathnames of data blocks read by chunked_readlines_iterator.
-
         Args:
             iterator: input iterator
             seed: random seed used for shuffling (or None)
@@ -167,10 +188,11 @@ class InfinitePermutationIterator(CheckpointableIterator):
 
 
 class SelectManyIterator(CheckpointableIterator):
+    """
+    Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
+    """
     def __init__(self, source_items: CheckpointableIterator, collection_selector: Callable[[Any], Iterable]):
         """
-        Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
-
         Args:
             source_items: iterable of paths to chunk files
         """
@@ -191,7 +213,7 @@ class SelectManyIterator(CheckpointableIterator):
             skip_to_checkpoint = self._flattened_item_index
             # main loop over source source_items
             for source_item in self._source_items:
-                data = self._collection_selector(source_item)
+                data = iter(self._collection_selector(source_item))
                 self._flattened_item_index = 0
                 if skip_to_checkpoint:
                     #print("Skipping to index", skip_to_checkpoint, file=sys.stderr)
@@ -224,10 +246,11 @@ def chunked_readlines_iterator(chunk_file_paths: CheckpointableIterator):
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
+    """
+    Shuffles given iterable using a limited buffer.
+    """
     def __init__(self, input_iterator: CheckpointableIterator, buffer_size: int, seed: int = 0):
         """
-        Shuffles given iterable using a limited buffer.
-        
         Args:
             input_iterator: checkpointable iterator or restartable iterable over input items to shuffle
             buffer_size: size of the buffer in number of items used for shuffling
@@ -282,10 +305,11 @@ class BufferedShuffleIterator(CheckpointableIterator):
 
 
 class MapIterator(CheckpointableIterator):
+    """
+    Applies given tranform to each data item
+    """
     def __init__(self, input_iterator: CheckpointableIterator, transform: Callable[[str],Any]=None):
         """
-        Applies given tranform to each data item
-        
         Args:
             input_iterator: checkpointable iterator
             transform: function to be applied to each data item
@@ -304,10 +328,11 @@ class MapIterator(CheckpointableIterator):
 
 
 class ZipIterator(CheckpointableIterator):
+    """
+    Zips items from all given iterators, like the Python standard function zip().
+    """
     def __init__(self, *iterators):
         """
-        Zips items from all given iterators, like the Python standard function zip().
-
         Args:
             iterators: list of iterators to zip, item by item
         """
@@ -332,13 +357,14 @@ class ZipIterator(CheckpointableIterator):
 #        we don't actually need to consume all items in the window. Hence, to make this faster, we should use
 #        double-buffering and return a slice view (which we'd have to write).
 class WindowedIterator(CheckpointableIterator):
+    """
+    Yields 'width' consecutive items in a sliding window.
+
+    E.g. [1, 2, 3 4, 5, 6] with width = 3 will yield
+    [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
+    """
     def __init__(self, source: Iterable, width: int):
         """
-        Yields 'width' consecutive items in a sliding window.
-
-        E.g. [1, 2, 3 4, 5, 6] with width = 3 will yield
-        [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
-
         Args:
             source: checkpointable input iterators
         """
@@ -384,12 +410,13 @@ class WindowedIterator(CheckpointableIterator):
 
 
 class RandomIterator(CheckpointableIterator):
+    """
+    Iterator to generate uniformly distributed random numbers in the interval [0,1).
+    Very similar to Random.random(), except that random numbers are
+    obtained via next().
+    """
     def __init__(self, seed: Optional[int]=None):
         """
-        Iterator to generate uniformly distributed random numbers in the interval [0,1).
-        Very similar to Random.random(), except that random numbers are
-        obtained via next().
-
         Args:
             seed: Random seed.
         """
@@ -431,13 +458,14 @@ class RecurrentIterator(CheckpointableIterator):
     """
     Iterates statefully over a step function. The step function accepts a state and a new item,
     and returns a new state and an output item, which is yielded.
-
-    Args:
-        source: checkpointable iterator to recur over
-        step_function: user-supplied function with signature step_function(state, item) -> (new_state, output)
-        initial_state: initial state to be passed to the step_function upon first invocation
     """
     def __init__(self, source: CheckpointableIterator, step_function: Callable[[Any,Any], Tuple[Any,Any]], initial_state: Any = None):
+        """
+        Args:
+            source: checkpointable iterator to recur over
+            step_function: user-supplied function with signature step_function(state, item) -> (new_state, output)
+            initial_state: initial state to be passed to the step_function upon first invocation
+        """
         self._source: CheckpointableIterator = source
         self._step_function: Callable[[Any,Any], Tuple[Any,Any]] = step_function
         self._initial_state: Any = initial_state
@@ -491,15 +519,8 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     is dynamic, and determined by a user-provided callback.
 
     This is based on Marian NMT's BatchGenerator.
-
-    Args:
-        source: The data set that is read from. Typically this is an infinite source.
-        read_ahead: Number of items to fetch ahead for grouping purposes.
-        key: User-provided callback to define how data is sorted for purpose of batching.
-        batch_size: Batch size in number of items. Either an integer or a callback to determine batch size for a given first batch item.
-        shuffle: Pass False to not randomize the batches. (default: True)
-        seed: Random seed for batch shuffling.
     """
+    # @TODO: We had agreed to remove the explicit member declarations, and instead implicitly declare them in __init__ upon assignment.
     # parameters
     _key: Callable[[Any], Any]
     _batch_size: Union[int,Callable[[Any], int]]
@@ -514,6 +535,15 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     _num_served: int            # number of batches served from the current set of batches
 
     def __init__(self, source, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: Optional[int]=None):
+        """
+        Args:
+            source: The data set that is read from. Typically this is an infinite source.
+            read_ahead: Number of items to fetch ahead for grouping purposes.
+            key: User-provided callback to define how data is sorted for purpose of batching.
+            batch_size: Batch size in number of items. Either an integer or a callback to determine batch size for a given first batch item.
+            shuffle: Pass False to not randomize the batches. (default: True)
+            seed: Random seed for batch shuffling.
+        """
         # keep arguments
         self._key = key
         self._batch_size = batch_size

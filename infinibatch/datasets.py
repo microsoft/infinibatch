@@ -9,7 +9,7 @@ This module contains common datasets, which are implemented as convenience funct
 
 def bump_seed(seed: Optional[int], step = 1):
     """
-    Helper to bump a random seed if not None
+    Helper to bump a random seed if not None.
     """
     return None if seed is None else seed + 1
 
