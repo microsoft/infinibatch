@@ -297,6 +297,30 @@ class TransformIterator(CheckpointableIterator):
         return self._transform(next(self._input_iterator))
 
 
+class ZipIterator(CheckpointableIterator):
+    def __init__(self, *iterators):
+        """
+        Zips items from all given iterators, like the Python standard function zip().
+
+        Args:
+            iterators: list of iterators to zip, item by item
+        """
+        self._iterators: List[CheckpointableIterator] = iterators
+
+    def getstate(self) -> NamedTuple:
+        return _namedtuple_from(input_states=tuple(iterator.getstate() for iterator in self._iterators))
+
+    def setstate(self, checkpoint: Optional[NamedTuple]):
+        for iterator, state in zip(self._iterators, checkpoint.input_states):
+            iterator.setstate(state)
+
+    def __next__(self):
+        res = []
+        for iterator in self._iterators:
+            res.append(next(iterator))
+        return tuple(res)
+
+
 # However, that may no longer be true with checkpointing, so let's keep it as a class for now.
 class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
     """

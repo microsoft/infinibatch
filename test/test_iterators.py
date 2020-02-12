@@ -7,7 +7,9 @@ import tempfile
 from typing import Iterable, Iterator, Any
 import unittest
 
-from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, TransformIterator
+from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, \
+                                  NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, \
+                                  TransformIterator, ZipIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -183,6 +185,21 @@ class TestTransformIterator(TestBase):
     def test_transform(self):
         items = list(TransformIterator(NativeCheckpointableIterator(range(100)), lambda x: x + 1))
         self.assertListEqual(items, list(range(1, 101)))
+
+
+class TestZipIterator(TestBase):
+    def test(self):
+        n = 100
+        seq1 = list(range(n))
+        seq2 = list(i * i for i in range(n))
+        it = ZipIterator(NativeCheckpointableIterator(seq1), NativeCheckpointableIterator(seq2))
+        items0 = list(itertools.islice(it, n * 3 // 10))
+        checkpoint = it.getstate()
+        items1a = list(it)
+        it.setstate(checkpoint)
+        items1b = list(it)
+        self.assertListEqual(items0 + items1a, list(zip(seq1, seq2)))  # basic function
+        self.assertListEqual(items1a, items1b)                         # checkpointing
 
 
 class Testchunked_dataset_iterator(TestBase):
