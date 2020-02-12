@@ -194,6 +194,9 @@ class SelectManyIterator(CheckpointableIterator):
     def __init__(self, source_items: CheckpointableIterator, collection_selector: Callable[[Any], Iterable]):
         """
         Args:
+            collection_selector: user callback that maps an item into an Iterable, whose items will be yielded.
+                                 The returned Iterable is used only once. Hence, it is also allowed to
+                                 return self-iterables, such as iterators and generator expressions.
             source_items: iterable of paths to chunk files
         """
         self._source_items: CheckpointableIterator = source_items
