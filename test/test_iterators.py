@@ -123,7 +123,7 @@ class TestNativeCheckpointableIterator(TestBase):
         self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
 
 
-class Testchunked_readlines_iterator(TestBase):    
+class TestChunkedReadlinesIterator(TestBase):    
     def test(self):
         items = list(chunked_readlines_iterator(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)

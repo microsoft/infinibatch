@@ -178,7 +178,7 @@ class SelectManyIterator(CheckpointableIterator):
             item_index   = self._flattened_item_index)
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        self._input_state = checkpoint.nested_state if checkpoint else None
+        self._input_state           = checkpoint.nested_state if checkpoint else None
         self._flattened_item_index  = checkpoint.item_index   if checkpoint else 0
         self._source_items.setstate(self._input_state)
         def _generate():

@@ -7,6 +7,13 @@ This module contains common datasets, which are implemented as convenience funct
 """
 
 
+def bump_seed(seed: Optional[int], step = 1):
+    """
+    Helper to bump a random seed if not None
+    """
+    return None if seed is None else seed + 1
+
+
 def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform: Callable[[Any],Any]=None, seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0):
     """
     Dataset reading data from gzipped chunks.
@@ -38,10 +45,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
     # set up the item randomizer
     if shuffle:
         # use different seed for BufferedShuffleGenerator
-        buffered_shuffle_iterator_seed = seed
-        if buffered_shuffle_iterator_seed is not None:
-            buffered_shuffle_iterator_seed += 1
-        samples = BufferedShuffleIterator(samples, buffer_size, buffered_shuffle_iterator_seed)
+        samples = BufferedShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
     
     # apply transform, if given
     if transform is not None:
