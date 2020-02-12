@@ -408,21 +408,57 @@ class RandomIterator(CheckpointableIterator):
         return self._random.random()
 
 
-def SamplingMapIterator(input_iterator: CheckpointableIterator, sampling_transform: Callable[[float,Any],Any], seed: Optional[int]=None):
+# It is not clear whether there is much value in this one. Let's leave it commented-out
+# for a while, then decide whether to delete or uncomment it?
+#def SamplingMapIterator(input_iterator: CheckpointableIterator, sampling_transform: Callable[[float,Any],Any], seed: Optional[int]=None):
+#    """
+#    Iterates over a checkpointable iterator and invokes a user-supplied transform function
+#    as sampling_transform(rand_val, item), where rand_val is a random number in [0,1).
+#
+#    Args:
+#        sampling_transform: a callable with signature (rand_val, item)
+#        seed: Random seed.
+#    """
+#    r = RandomIterator(seed)
+#    i = ZipIterator(r, input_iterator)  # generates tuples (random number, input item)
+#    def _wrapped_transform(arg: Tuple[float, Any]) -> Any:  # invokes user's transform function with the tuple members as the arguments
+#        randval, item = arg
+#        return sampling_transform(randval, item)
+#    return MapIterator(i, _wrapped_transform)
+
+
+class RecurrentIterator(CheckpointableIterator):
     """
-    Iterates over a checkpointable iterator and invokes a user-supplied transform function
-    as sampling_transform(rand_val, item), where rand_val is a random number in [0,1).
+    Iterates statefully over a step function. The step function accepts a state and a new item,
+    and returns a new state and an output item, which is yielded.
 
     Args:
-        sampling_transform: a callable with signature (rand_val, item)
-        seed: Random seed.
+        source: checkpointable iterator to recur over
+        step_function: user-supplied function with signature step_function(state, item) -> (new_state, output)
+        initial_state: initial state to be passed to the step_function upon first invocation
     """
-    r = RandomIterator(seed)
-    i = ZipIterator(r, input_iterator)  # generates tuples (random number, input item)
-    def _wrapped_transform(arg: Tuple[float, Any]) -> Any:  # invokes user's transform function with the tuple members as the arguments
-        randval, item = arg
-        return sampling_transform(randval, item)
-    return MapIterator(i, _wrapped_transform)
+    def __init__(self, source: CheckpointableIterator, step_function: Callable[[Any,Any], Tuple[Any,Any]], initial_state: Any = None):
+        self._source: CheckpointableIterator = source
+        self._step_function: Callable[[Any,Any], Tuple[Any,Any]] = step_function
+        self._initial_state: Any = initial_state
+        self.setstate(None)
+    
+    def getstate(self):
+        return _namedtuple_from(
+            recurrent_state = self._recurrent_state,
+            source_state = self._source.getstate())
+    
+    def setstate(self, checkpoint):
+        self._recurrent_state = checkpoint.recurrent_state if checkpoint else self._initial_state
+        self._source.setstate(checkpoint.source_state if checkpoint else None)
+        def _generate():
+            for item in self._source:
+                self._recurrent_state, output = self._step_function(self._recurrent_state, item)
+                yield output
+        self._iterator = _generate()
+
+    def __next__(self):
+        return next(self._iterator)
 
 
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
