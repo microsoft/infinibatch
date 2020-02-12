@@ -9,7 +9,7 @@ import unittest
 
 from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, \
-                                  TransformIterator, ZipIterator
+                                  TransformIterator, ZipIterator, SlidingWindowIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -200,6 +200,15 @@ class TestZipIterator(TestBase):
         items1b = list(it)
         self.assertListEqual(items0 + items1a, list(zip(seq1, seq2)))  # basic function
         self.assertListEqual(items1a, items1b)                         # checkpointing
+
+
+class TestSlidingWindowIterator(TestBase):
+    def test(self):
+        seq = [1, 2, 3, 4, 5, 6]
+        it = SlidingWindowIterator(NativeCheckpointableIterator(seq), 3)
+        actual = list(it)
+        expected = [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
+        self.assertListEqual(actual, expected)
 
 
 class Testchunked_dataset_iterator(TestBase):

@@ -5,7 +5,7 @@ import gzip
 from itertools import cycle, islice
 import os
 from random import Random
-from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTuple, Optional, Union
+from typing import Any, Callable, Iterable, Iterator, Generator, List, Deque, NamedTuple, Optional, Union
 
 
 # TODO for first release:
@@ -53,6 +53,12 @@ class CheckpointableIterator(collections.abc.Iterator):
     """
     def __iter__(self):
         return self
+
+    def __getstate__(self) -> NamedTuple:  # implementation of pickle Protocol
+        return self.getstate()
+
+    def __setstate__(self, checkpoint: Optional[NamedTuple]):
+        self.setstate(checkpoint)
 
     @abstractmethod
     def getstate(self) -> NamedTuple:
@@ -248,7 +254,7 @@ class BufferedShuffleIterator(CheckpointableIterator):
             self._input_iterator.setstate(None)
         self._generator = self._generate()
 
-    def _generate(self):
+    def _generate(self) -> Iterator:
         # shuffle data with a buffer:
         # this is similar to what the Fisher-Yates shuffle does,
         # but modified to run with a constant-size buffer
@@ -319,6 +325,44 @@ class ZipIterator(CheckpointableIterator):
         for iterator in self._iterators:
             res.append(next(iterator))
         return tuple(res)
+
+
+# @TODO: This has complexity O(width * length). In some cases, we don't actually need to
+#        consume all items in the window. Hence, to make this faster, we should use double-buffering
+#        and return a slice view (which we'd have to write). This will also simplify checkpointing.
+class SlidingWindowIterator(CheckpointableIterator):
+    def __init__(self, source: Iterable, width: int):
+        """
+        Gathers 'width' consecutive items in a sliding window.
+
+        E.g. [1, 2, 3 4, 5, 6] with width = 3 will yield
+        [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
+
+        Args:
+            source: checkpointable input iterators
+        """
+        self._source: CheckpointableIterator = source
+        self._width: int = width
+        self._fifo: Deque = collections.deque(maxlen=width)
+        self.setstate(None)
+
+    def getstate(self) -> NamedTuple:
+        raise NotImplementedError
+
+    def setstate(self, checkpoint: Optional[NamedTuple]):
+        self._generator = self._generate()
+
+    def _generate(self) -> Iterator:
+        self._fifo.extend(islice(self._source, self._width))
+        if len(self._fifo) != self._width:  # source too short
+            raise StopIteration
+        for item in self._source:
+            yield tuple(self._fifo)
+            self._fifo.append(item)  # note: due to maxlen, this will automatically drop the oldest item
+        yield tuple(self._fifo)  # very last item
+
+    def __next__(self):
+        return next(self._generator)
 
 
 # However, that may no longer be true with checkpointing, so let's keep it as a class for now.
