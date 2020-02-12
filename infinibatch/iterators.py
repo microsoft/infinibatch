@@ -5,7 +5,7 @@ import gzip
 from itertools import cycle, islice
 import os
 from random import Random
-from typing import Any, Callable, Iterable, Iterator, Generator, List, NamedTuple, Optional, Union
+from typing import Any, Callable, Iterable, Iterator, Generator, List, Tuple, NamedTuple, Optional, Union
 
 
 # TODO for first release:
@@ -383,6 +383,48 @@ class WindowedIterator(CheckpointableIterator):
         return next(self._generator)
 
 
+class RandomIterator(CheckpointableIterator):
+    def __init__(self, seed: Optional[int]=None):
+        """
+        Iterator to generate uniformly distributed random numbers in the interval [0,1).
+        Very similar to Random.random(), except that random numbers are
+        obtained via next().
+
+        Args:
+            seed: Random seed.
+        """
+        self._random: Random = Random()
+        if seed is not None:
+            self._random.seed(seed)
+
+    def getstate(self) -> NamedTuple:
+        return _namedtuple_from(
+            random_state=self._random.getstate())
+
+    def setstate(self, checkpoint: Optional[NamedTuple]):
+        self._random.setstate(checkpoint.random_state if checkpoint else None)
+
+    def __next__(self):
+        return self._random.random()
+
+
+def SamplingMapIterator(input_iterator: CheckpointableIterator, sampling_transform: Callable[[float,Any],Any], seed: Optional[int]=None):
+    """
+    Iterates over a checkpointable iterator and invokes a user-supplied transform function
+    as sampling_transform(rand_val, item), where rand_val is a random number in [0,1).
+
+    Args:
+        sampling_transform: a callable with signature (rand_val, item)
+        seed: Random seed.
+    """
+    r = RandomIterator(seed)
+    i = ZipIterator(r, input_iterator)  # generates tuples (random number, input item)
+    def _wrapped_transform(arg: Tuple[float, Any]) -> Any:  # invokes user's transform function with the tuple members as the arguments
+        randval, item = arg
+        return sampling_transform(randval, item)
+    return MapIterator(i, _wrapped_transform)
+
+
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """
     Iterates over items from a checkpointable iterator and groups items of similar length into batches.
@@ -415,7 +457,7 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     _input_state: NamedTuple    # state of input before reading the current set of batches
     _num_served: int            # number of batches served from the current set of batches
 
-    def __init__(self, source, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: int=None):
+    def __init__(self, source, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: Optional[int]=None):
         # keep arguments
         self._key = key
         self._batch_size = batch_size
