@@ -10,7 +10,7 @@ import unittest
 from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, WindowedIterator, \
-                                  RandomIterator, RecurrentIterator
+                                  RandomIterator, RecurrentIterator, SamplingRandomMapIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -129,7 +129,7 @@ class TestNativeCheckpointableIterator(TestBase):
 # @TODO: Move all tests of simple operators to the top, so that they can run first
 class TestRecurrentIterator(TestBase):
     def test(self):
-        n = 10
+        n = 100
         seq = list(range(n))
         def step_function(prev_state, item):
             output = item + prev_state
@@ -147,6 +147,19 @@ class TestRecurrentIterator(TestBase):
             expected.append(expected[-1] + i)
         self.assertListEqual(actual,   expected)  # basic operation
         self.assertListEqual(actual1a, actual1b)  # checkpointing
+
+
+class TestSamplingRandomMapIterator(TestBase):
+    def test(self):
+        n = 20
+        seq = list(range(n))
+        it = SamplingRandomMapIterator(NativeCheckpointableIterator(seq), transform=lambda random, item: item + random.random(), seed=1)
+        actual0 = list(itertools.islice(it, n * 3 // 10))
+        checkpoint = it.getstate()
+        actual1a = list(it)
+        it.setstate(checkpoint)
+        actual1b = list(it)
+        self.assertListEqual(actual1a, actual1b)
 
 
 class TestChunkedReadlinesIterator(TestBase):    

@@ -461,6 +461,26 @@ class RecurrentIterator(CheckpointableIterator):
         return next(self._iterator)
 
 
+def SamplingRandomMapIterator(source: CheckpointableIterator, transform: Callable[[Random,Any],Any], seed: Optional[int]=None):
+    """
+    An iterator that calls a transform function on each item, while also passing a checkpointed
+    random generator.
+
+    Args:
+        source: checkpointable iterator to recur over
+        step_function: user-supplied function with signature step_function(random, item) -> result_item
+        seed: random seed
+    """
+    _random = Random()
+    if seed:
+        _random.seed(seed)
+    def _step_function(state, item):
+        _random.setstate(state)
+        output = transform(_random, item)
+        return _random.getstate(), output
+    return RecurrentIterator(source, _step_function, initial_state=_random.getstate())
+
+
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """
     Iterates over items from a checkpointable iterator and groups items of similar length into batches.
