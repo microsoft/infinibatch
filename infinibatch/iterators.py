@@ -281,7 +281,7 @@ class BufferedShuffleIterator(CheckpointableIterator):
         return next(self._generator)
 
 
-class TransformIterator(CheckpointableIterator):
+class MapIterator(CheckpointableIterator):
     def __init__(self, input_iterator: CheckpointableIterator, transform: Callable[[str],Any]=None):
         """
         Applies given tranform to each data item
@@ -331,7 +331,7 @@ class ZipIterator(CheckpointableIterator):
 # @TODO: The yield makes a (shallow) copy of the window, which has complexity O(width * length). In some cases,
 #        we don't actually need to consume all items in the window. Hence, to make this faster, we should use
 #        double-buffering and return a slice view (which we'd have to write).
-class SlidingWindowIterator(CheckpointableIterator):
+class WindowedIterator(CheckpointableIterator):
     def __init__(self, source: Iterable, width: int):
         """
         Yields 'width' consecutive items in a sliding window.
@@ -349,7 +349,7 @@ class SlidingWindowIterator(CheckpointableIterator):
     def getstate(self) -> NamedTuple:
         return _namedtuple_from(
             input_state = self._input_state,  # state for first item in FIFO
-            item_index  = self._item_index)  # index of next item to serve
+            item_index  = self._item_index)   # index of next item to serve
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         self._input_state = checkpoint.input_state if checkpoint else None
@@ -369,24 +369,23 @@ class SlidingWindowIterator(CheckpointableIterator):
             # we got 'width' items; append another 'width' (or less if at end)
             next_input_state = self._source.getstate()
             self._fifo.extend(islice(self._source, self._width))
-            # now serve all positions in first half (or less if at end)
+            # now serve all positions in first half (last = width - 1). If at end, then limit accordingly.
             last = min(self._width - 1, len(self._fifo) - self._width)
             while self._item_index <= last:
                 self._item_index += 1
                 yield self._fifo_slice(self._item_index - 1)
             # drop all we just served; if < width left, we have hit the end
-            self._fifo = self._fifo[last + 1:]  # Note: This must be a new list, since the old might still be in a slice view.
-            self._input_state = next_input_state
+            self._fifo = self._fifo[last + 1:]    # Note: This must be a new list, since the old might still be in a slice view.
+            self._input_state = next_input_state  # this reflects now the first element in the FIFO 
             self._item_index = 0
 
     def __next__(self):
         return next(self._generator)
 
 
-# However, that may no longer be true with checkpointing, so let's keep it as a class for now.
-class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
+class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """
-    Iterates over items from a Dataset and group items of similar length into batches.
+    Iterates over items from a checkpointable iterator and groups items of similar length into batches.
 
     The algorithm reads a head a certain number of lines (e.g. 10 million), sorts them by
     length, and them groups them into batches from start to end. The sort is stable, such
@@ -396,7 +395,7 @@ class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
     This is based on Marian NMT's BatchGenerator.
 
     Args:
-        dataset: The data set that is read from. Typically this is an infinite source.
+        source: The data set that is read from. Typically this is an infinite source.
         read_ahead: Number of items to fetch ahead for grouping purposes.
         key: User-provided callback to define how data is sorted for purpose of batching.
         batch_size: Batch size in number of items. Either an integer or a callback to determine batch size for a given first batch item.
@@ -409,14 +408,14 @@ class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
     _read_ahead: int
 
     # state
-    _data_iter: Iterator[Any]   # iterator into _dataset
+    _data_iter: Iterator[Any]   # iterator into _source
     _random: Random             # random generator
-    _dataset_exhausted: bool    # set to True once we hit StopIteration on dataset
+    _source_exhausted: bool    # set to True once we hit StopIteration on source
     _batch_iter: Iterator[Any]  # iterator into current set of batches
     _input_state: NamedTuple    # state of input before reading the current set of batches
     _num_served: int            # number of batches served from the current set of batches
 
-    def __init__(self, dataset, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: int=None):
+    def __init__(self, source, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: int=None):
         # keep arguments
         self._key = key
         self._batch_size = batch_size
@@ -426,7 +425,7 @@ class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
             self._random = Random()
             if seed is not None:
                 self._random.seed(seed)
-        self._data_iter = iter(dataset)
+        self._data_iter = iter(source)
         self.setstate(None)
 
     def getstate(self):
@@ -443,16 +442,16 @@ class BucketedReadaheadBatchDatasetIterator(CheckpointableIterator):
         self._data_iter.setstate(self._input_state)
         if self._random_state:
             self._random.setstate(self._random_state)
-        self._dataset_exhausted = False
+        self._source_exhausted = False
         def _generate():
             skip_to_checkpoint = self._num_served
-            dataset_exhausted = False
-            while not dataset_exhausted:
+            source_exhausted = False
+            while not source_exhausted:
                 # prefetch the readahead buffer
                 self._input_state = self._data_iter.getstate()
                 self._random_state = self._random.getstate() if self._random else None
                 items = list(islice(self._data_iter, self._read_ahead))
-                dataset_exhausted = (len(items) < self._read_ahead)
+                source_exhausted = (len(items) < self._read_ahead)
                 # create batches
                 batches = self._create_batches(items)
                 # shuffle the batches

@@ -8,8 +8,8 @@ from typing import Iterable, Iterator, Any
 import unittest
 
 from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, \
-                                  NativeCheckpointableIterator, BucketedReadaheadBatchDatasetIterator, \
-                                  TransformIterator, ZipIterator, SlidingWindowIterator
+                                  NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
+                                  MapIterator, ZipIterator, WindowedIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -181,9 +181,9 @@ class TestBufferedShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
-class TestTransformIterator(TestBase):
+class TestMapIterator(TestBase):
     def test_transform(self):
-        items = list(TransformIterator(NativeCheckpointableIterator(range(100)), lambda x: x + 1))
+        items = list(MapIterator(NativeCheckpointableIterator(range(100)), lambda x: x + 1))
         self.assertListEqual(items, list(range(1, 101)))
 
 
@@ -202,12 +202,12 @@ class TestZipIterator(TestBase):
         self.assertListEqual(items1a, items1b)                         # checkpointing
 
 
-class TestSlidingWindowIterator(TestBase):
+class TestWindowedIterator(TestBase):
     def test(self):
         for max in [0, 2, 3, 8, 9, 10, 11, 12]:  # cover various boundary conditions
             seq = list(range(max))
             #print('seq', seq)
-            it = SlidingWindowIterator(NativeCheckpointableIterator(seq), 3)
+            it = WindowedIterator(NativeCheckpointableIterator(seq), 3)
             actual0 = list(itertools.islice(it, max * 3 // 10))
             checkpoint = it.getstate()
             actual1a = list(it)
@@ -260,19 +260,19 @@ class Testchunked_dataset_iterator(TestBase):
             self.assertListEqual(items1, items2)
 
 
-class TestBucketedReadaheadBatchDatasetIterator(TestBase):
+class TestBucketedReadaheadBatchIterator(TestBase):
     def txest_basic_functionality(self):
         num_batches = 13
         batch_labels = 75  # note: these settings imply a few iterations through the chunks
         # basic operation, should not crash
-        bg = BucketedReadaheadBatchDatasetIterator(
+        bg = BucketedReadaheadBatchIterator(
             chunked_dataset_iterator(self.data_dir, shuffle=True, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))
         batches1 = list(itertools.islice(bg, num_batches))
         # verify determinism
-        bg = BucketedReadaheadBatchDatasetIterator(
+        bg = BucketedReadaheadBatchIterator(
             chunked_dataset_iterator(self.data_dir, shuffle=True, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
@@ -285,7 +285,7 @@ class TestBucketedReadaheadBatchDatasetIterator(TestBase):
         first_batches = 12
         extra_batches = 7
         batch_labels = 123
-        bg = BucketedReadaheadBatchDatasetIterator(
+        bg = BucketedReadaheadBatchIterator(
             chunked_dataset_iterator(self.data_dir, shuffle=True, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),

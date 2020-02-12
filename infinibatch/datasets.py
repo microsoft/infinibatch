@@ -1,4 +1,4 @@
-from .iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, TransformIterator
+from .iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, MapIterator
 from typing import Union, Iterable, Callable, Any, Optional
 import os
 
@@ -49,7 +49,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
     
     # apply transform, if given
     if transform is not None:
-        samples = TransformIterator(samples, transform)
+        samples = MapIterator(samples, transform)
 
     # this is what we are serving out
     return samples
