@@ -4,7 +4,7 @@ from random import Random
 import os
 import shutil
 import tempfile
-from typing import Iterable, Iterator, Any
+from typing import Iterable, Iterator, Any, Union
 import unittest
 
 from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, \
@@ -151,15 +151,23 @@ class TestRecurrentIterator(TestBase):
 
 class TestSamplingRandomMapIterator(TestBase):
     def test(self):
-        n = 20
-        seq = list(range(n))
-        it = SamplingRandomMapIterator(NativeCheckpointableIterator(seq), transform=lambda random, item: item + random.random(), seed=1)
-        actual0 = list(itertools.islice(it, n * 3 // 10))
-        checkpoint = it.getstate()
-        actual1a = list(it)
-        it.setstate(checkpoint)
-        actual1b = list(it)
-        self.assertListEqual(actual1a, actual1b)
+        for seq in (range(100), [[1,2,3], [4,5], [6,7,8]]):
+            n = len(seq)
+            def _transform(random: Random, item: Union[int,Iterable]):
+                if isinstance(item, int):  # first test case
+                    return item + random.random()
+                else:  # second test case
+                    output = []
+                    for i in item:
+                        output.append(i + random.random())
+                    return output
+            it = SamplingRandomMapIterator(NativeCheckpointableIterator(seq), transform=_transform, seed=1)
+            actual0 = list(itertools.islice(it, n * 3 // 10))
+            checkpoint = it.getstate()
+            actual1a = list(it)
+            it.setstate(checkpoint)
+            actual1b = list(it)
+            self.assertListEqual(actual1a, actual1b)
 
 
 class TestChunkedReadlinesIterator(TestBase):    
