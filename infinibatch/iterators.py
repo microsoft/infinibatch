@@ -314,7 +314,8 @@ class ZipIterator(CheckpointableIterator):
         self._iterators: List[CheckpointableIterator] = iterators
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(input_states=tuple(iterator.getstate() for iterator in self._iterators))
+        return _namedtuple_from(
+            input_states=tuple(iterator.getstate() for iterator in self._iterators))
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         for iterator, state in zip(self._iterators, checkpoint.input_states):
@@ -327,9 +328,9 @@ class ZipIterator(CheckpointableIterator):
         return tuple(res)
 
 
-# @TODO: This has complexity O(width * length). In some cases, we don't actually need to
-#        consume all items in the window. Hence, to make this faster, we should use double-buffering
-#        and return a slice view (which we'd have to write). This will also simplify checkpointing.
+# @TODO: The yield makes a (shallow) copy of the window, which has complexity O(width * length). In some cases,
+#        we don't actually need to consume all items in the window. Hence, to make this faster, we should use
+#        double-buffering and return a slice view (which we'd have to write). This will also simplify checkpointing.
 class SlidingWindowIterator(CheckpointableIterator):
     def __init__(self, source: Iterable, width: int):
         """
@@ -346,26 +347,37 @@ class SlidingWindowIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        raise NotImplementedError  # @TODO
+        return _namedtuple_from(
+            input_state = self._this_state,  # state for first item in FIFO
+            item_index  = self._item_index)  # index of next item to serve
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
+        self._this_state = checkpoint.input_state if checkpoint else None
+        self._item_index = checkpoint.item_index  if checkpoint else 0
+        self._source.setstate(self._this_state)
         self._generator = self._generate()
 
-    def _fifo_slice(self, i):
+    def _fifo_slice(self, i):  # returns a window into the FIFO beginning at i
         # @TODO: for efficiency, make this a slice view
         return tuple(self._fifo[i:i + self._width])
 
     def _generate(self) -> Iterator:
+        self._this_state = None
+        self._next_state = self._source.getstate()
         self._fifo = list(islice(self._source, self._width))
         # we do this in overlapping blocks of length 2*width, for easier checkpointing and potential efficiency
         while len(self._fifo) == self._width:
             # we got 'width' items; append another 'width' (or less if at end)
+            self._this_state = self._next_state
+            self._next_state = self._source.getstate()
             self._fifo.extend(islice(self._source, self._width))
             # now serve all positions in first half (or less if at end)
             last = min(self._width - 1, len(self._fifo) - self._width)
-            for i in range(last + 1):
-                yield self._fifo_slice(i)
-            self._fifo = self._fifo[last + 1:]  # drop all we just served; if < width left, we have hit the end
+            while self._item_index <= last:
+                self._item_index += 1
+                yield self._fifo_slice(self._item_index - 1)
+            self._fifo = self._fifo[last + 1:]  # drop all we just served; if < width left, we have hit the end. Note: This must be a new list, since the old might still be in a slice view
+            self._item_index = 0
 
     def __next__(self):
         return next(self._generator)
