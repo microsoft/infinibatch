@@ -39,23 +39,22 @@ Features:
 # - make iterator pipeline work for streaming data
 
 
-def _namedtuple_from(**members):
+def _dict_from(**members):
     """
-    Creates a record of variables, which are then accessed by . syntax.
-    Wraps namedtuple type creation and instantiation into a single call.
+    Creates a dict from the members.
 
     Example:
-        >>> r = namedtuple_from(x = 13, y = 42)
-        >>> r.x
+        >>> r = _dict_from(x = 13, y = 42)
+        >>> r['x']
             13
 
     Args:
         members: values that the record is to contain
 
     Returns:
-        A singleton named tuple that has all passed kw args as immutable class members.
+        A dict that has all passed kw args as items.
     """
-    return collections.namedtuple("namedtuple_from", members.keys())(**members)
+    return members
 
 
 def _advance_iterator(iterator: Iterator, n: int):
@@ -111,11 +110,11 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(consumed_items=self._consumed_items)
+        return _dict_from(consumed_items=self._consumed_items)
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         self._iterator = iter(self._input_iterable)
-        self._consumed_items = _advance_iterator(self._iterator, checkpoint.consumed_items) if checkpoint is not None else 0
+        self._consumed_items = _advance_iterator(self._iterator, checkpoint['consumed_items']) if checkpoint is not None else 0
 
     def __next__(self):
         item = next(self._iterator)  # call this before increasing _consumed_items to correctly handle the case when a StopIteration exception is thrown
@@ -147,14 +146,14 @@ class InfinitePermutationIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(
+        return _dict_from(
             random_state = self._random_state,  # state of random generator before generating the current shuffling of the sequence
             item_count   = self._item_count)    # how many items have already been iterated over in the current shuffling
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         # set iteration state. Do this outside the generator below in case getstate() is called before ever iterating
-        self._random_state = checkpoint.random_state if checkpoint else None
-        self._item_count   = checkpoint.item_count   if checkpoint else 0
+        self._random_state = checkpoint['random_state'] if checkpoint else None
+        self._item_count   = checkpoint['item_count']   if checkpoint else 0
         # We define the iteration itself as a generator for ease of implementation.
         # We could as well just have used an explicit state machine represented by class members.
         def _generate() -> Iterator:
@@ -168,7 +167,7 @@ class InfinitePermutationIterator(CheckpointableIterator):
                 # (re-)shuffle all items
                 self._random_state = random.getstate()  # remember random state before shuffling
                 self._item_count   = 0
-                shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use setstate(checkpoint.nested_state) on it
+                shuffled_items = self._original_items[:]  # note: if underlying iterator is checkpointable, use setstate(checkpoint['nested_state']) on it
                 if self._shuffle:
                     random.shuffle(shuffled_items)
                 shuffled_iterator = iter(shuffled_items)
@@ -204,13 +203,13 @@ class SelectManyIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(
+        return _dict_from(
             nested_state = self._input_state,
             item_index   = self._flattened_item_index)
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        self._input_state           = checkpoint.nested_state if checkpoint else None
-        self._flattened_item_index  = checkpoint.item_index   if checkpoint else 0
+        self._input_state           = checkpoint['nested_state'] if checkpoint else None
+        self._flattened_item_index  = checkpoint['item_index']   if checkpoint else 0
         self._source_items.setstate(self._input_state)
         def _generate():
             skip_to_checkpoint = self._flattened_item_index
@@ -265,16 +264,16 @@ class BufferedShuffleIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(
+        return _dict_from(
             nested_checkpoint = self._input_iterator.getstate(),
             buffer            = copy.deepcopy(self._buffer),
             random_state      = self._random.getstate())
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
         if checkpoint:
-            self._input_iterator.setstate(checkpoint.nested_checkpoint)
-            self._buffer = checkpoint.buffer
-            self._random.setstate(checkpoint.random_state)
+            self._input_iterator.setstate(checkpoint['nested_checkpoint'])
+            self._buffer = checkpoint['buffer']
+            self._random.setstate(checkpoint['random_state'])
             # @TODO: Can we add a comment how the flush part is handled?
         else:
             self._input_iterator.setstate(None)
@@ -342,11 +341,11 @@ class ZipIterator(CheckpointableIterator):
         self._iterators: List[CheckpointableIterator] = iterators
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(
+        return _dict_from(
             input_states=tuple(iterator.getstate() for iterator in self._iterators))
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        for iterator, state in zip(self._iterators, checkpoint.input_states):
+        for iterator, state in zip(self._iterators, checkpoint['input_states']):
             iterator.setstate(state)
 
     def __next__(self):
@@ -376,13 +375,13 @@ class WindowedIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(
+        return _dict_from(
             input_state = self._input_state,  # state for first item in FIFO
             item_index  = self._item_index)   # index of next item to serve
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        self._input_state = checkpoint.input_state if checkpoint else None
-        self._item_index  = checkpoint.item_index  if checkpoint else 0
+        self._input_state = checkpoint['input_state'] if checkpoint else None
+        self._item_index  = checkpoint['item_index']  if checkpoint else 0
         self._source.setstate(self._input_state)
         self._generator = self._generate()
 
@@ -428,11 +427,11 @@ class RandomIterator(CheckpointableIterator):
             self._random.seed(seed)
 
     def getstate(self) -> NamedTuple:
-        return _namedtuple_from(
+        return _dict_from(
             random_state=self._random.getstate())
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        self._random.setstate(checkpoint.random_state if checkpoint else None)
+        self._random.setstate(checkpoint['random_state'] if checkpoint else None)
 
     def __next__(self):
         return self._random.random()
@@ -475,13 +474,13 @@ class RecurrentIterator(CheckpointableIterator):
         self.setstate(None)
     
     def getstate(self):
-        return _namedtuple_from(
+        return _dict_from(
             recurrent_state = self._recurrent_state,
             source_state = self._source.getstate())
     
     def setstate(self, checkpoint):
-        self._recurrent_state = checkpoint.recurrent_state if checkpoint else self._initial_state
-        self._source.setstate(checkpoint.source_state if checkpoint else None)
+        self._recurrent_state = checkpoint['recurrent_state'] if checkpoint else self._initial_state
+        self._source.setstate(checkpoint['source_state'] if checkpoint else None)
         def _generate():
             for item in self._source:
                 self._recurrent_state, output = self._step_function(self._recurrent_state, item)
@@ -560,15 +559,15 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
         self.setstate(None)
 
     def getstate(self):
-        return _namedtuple_from(
+        return _dict_from(
             input_state  = self._input_state,
             random_state = self._random_state,
             num_served   = self._num_served)
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        self._input_state  = checkpoint.input_state  if checkpoint else None
-        self._random_state = checkpoint.random_state if checkpoint else None
-        self._num_served   = checkpoint.num_served   if checkpoint else 0
+        self._input_state  = checkpoint['input_state']  if checkpoint else None
+        self._random_state = checkpoint['random_state'] if checkpoint else None
+        self._num_served   = checkpoint['num_served']   if checkpoint else 0
         # checkpointing: restore to start of current set of batches
         self._data_iter.setstate(self._input_state)
         if self._random_state:
