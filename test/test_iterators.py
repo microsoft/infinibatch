@@ -8,7 +8,7 @@ from typing import Iterable, Iterator, Any, Union
 import unittest
 import pickle
 
-from infinibatch.iterators import InfinitePermutationIterator, chunked_readlines_iterator, BufferedShuffleIterator, \
+from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, WindowedIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator
@@ -174,9 +174,11 @@ class TestSamplingRandomMapIterator(TestBase):
             self.assertListEqual(actual1a, actual1b)
 
 
-class TestChunkedReadlinesIterator(TestBase):    
+class TestChunkedReadlinesIterator(TestBase):
+    # Note: This test doubles as a test of SelectManyIterator, around which ChunkedReadlinesIterator()
+    # is a shallow wrapper.
     def test(self):
-        items = list(chunked_readlines_iterator(NativeCheckpointableIterator(self.chunk_file_paths)))
+        items = list(ChunkedReadlinesIterator(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -192,8 +194,8 @@ class TestChunkedReadlinesIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(chunked_readlines_iterator(NativeCheckpointableIterator([lf_file])))
-        crlf_dat = list(chunked_readlines_iterator(NativeCheckpointableIterator([crlf_file])))
+        lf_data = list(ChunkedReadlinesIterator(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(ChunkedReadlinesIterator(NativeCheckpointableIterator([crlf_file])))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -206,7 +208,7 @@ class TestChunkedReadlinesIterator(TestBase):
         for _ in range(5):
             first_length = random.randrange(11,31)
             extra_length = random.randrange(11,33)
-            dataset = chunked_readlines_iterator(chunk_file_paths)
+            dataset = ChunkedReadlinesIterator(chunk_file_paths)
             for _ in range(first_length):
                 next(dataset)
             checkpoint = dataset.getstate()

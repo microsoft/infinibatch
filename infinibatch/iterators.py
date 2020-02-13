@@ -32,8 +32,9 @@ Features:
 # TODO for next release:
 #  - implement prefetching thread (possibly at the end of the pipeline) to avoid latency spikes
 #  - implement new version of BufferedShuffleIterator that has smaller checkpoints
-#  - modify chunked_readlines_iterator to also work on uncompressed data, or even more general data formats
+#  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
 #  - add type checks to guarantee that input iterators are checkpointable
+#  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
 # - make iterator pipeline work for streaming data
@@ -127,7 +128,7 @@ class InfinitePermutationIterator(CheckpointableIterator):
     Infinitely generates permutations of the items in the given iterable.
 
     Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by chunked_readlines_iterator.
+    for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
     """
     def __init__(self, items: Iterator, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
@@ -233,7 +234,7 @@ class SelectManyIterator(CheckpointableIterator):
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-def chunked_readlines_iterator(chunk_file_paths: CheckpointableIterator):
+def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator):
     """
     Reads text lines from zipped chunk files whose names are provided by an iterator.
 
@@ -332,8 +333,10 @@ class MapIterator(CheckpointableIterator):
 class ZipIterator(CheckpointableIterator):
     """
     Zips items from all given iterators, like the Python standard function zip().
+
+    Like Python's build-in zip(), the iteration stops when the shortest input iterable is exhausted.
     """
-    def __init__(self, *iterators):
+    def __init__(self, *iterators: CheckpointableIterator):
         """
         Args:
             iterators: list of iterators to zip, item by item
@@ -349,7 +352,7 @@ class ZipIterator(CheckpointableIterator):
             iterator.setstate(state)
 
     def __next__(self):
-        res = []
+        res = []  # (note: can't use a generator expression, as it gets confused when a next() call raises StopIteration)
         for iterator in self._iterators:
             res.append(next(iterator))
         return tuple(res)
@@ -400,8 +403,9 @@ class WindowedIterator(CheckpointableIterator):
             # now serve all positions in first half (last = width - 1). If at end, then limit accordingly.
             last = min(self._width - 1, len(self._fifo) - self._width)
             while self._item_index <= last:
+                window = self._fifo_slice(self._item_index)
                 self._item_index += 1
-                yield self._fifo_slice(self._item_index - 1)
+                yield window
             # drop all we just served; if < width left, we have hit the end
             self._fifo = self._fifo[last + 1:]    # Note: This must be a new list, since the old might still be in a slice view.
             self._input_state = next_input_state  # this reflects now the first element in the FIFO 

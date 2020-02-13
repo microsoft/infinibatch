@@ -4,6 +4,7 @@ from ..datasets  import chunked_dataset_iterator
 from typing import Union, Iterable, Any
 
 
+# @TODO: This has been tested once, but we have no regression test presently. I am worried tests will fail if Torch is not installed.
 class IterableCheckpointedDataset(torch.utils.data.IterableDataset):
     """
     Wraps a CheckpointableIterator into a PyTorch IterableDataset, which is recognized by its type by
@@ -19,7 +20,7 @@ class IterableCheckpointedDataset(torch.utils.data.IterableDataset):
         return iter(self._source)
 
 
-# old
+# @TODO: This is currently untested, and may not work presently.
 class IterableChunkedDataset(torch.utils.data.IterableDataset):
     def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: int=None, world_size: int=1, rank: int=0, num_workers_per_rank: int=1):
         super().__init__()
