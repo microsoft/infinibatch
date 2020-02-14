@@ -555,6 +555,7 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
         self._batch_size = batch_size
         self._read_ahead = read_ahead
         # initialize state
+        self._random = None
         if shuffle:
             self._random = Random()
             if seed is not None:
