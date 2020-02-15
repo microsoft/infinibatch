@@ -11,7 +11,8 @@ import pickle
 from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, WindowedIterator, \
-                                  RandomIterator, RecurrentIterator, SamplingRandomMapIterator
+                                  RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
+                                  PrefetchIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -292,6 +293,38 @@ class TestRandomIterator(TestBase):
 #        it.setstate(checkpoint)
 #        items1b = list(itertools.islice(it, n * 7 // 10))
 #        self.assertListEqual(items1a, items1b)
+
+
+class TestPrefetchIterator(TestBase):
+    def setUp(self):
+        self.data = list(range(42))
+        source = NativeCheckpointableIterator(self.data)
+        self.prefetched = PrefetchIterator(source, buffer_size=13)
+
+    def tearDown(self):
+        pass
+
+    def test(self):
+        self.assertListEqual(list(self.prefetched), self.data)
+
+    def test_checkpointing_in_middle(self):
+        output = [next(self.prefetched) for _ in range(22)]
+        self.prefetched.setstate(self.prefetched.getstate())
+        output += [item for item in self.prefetched]
+        self.assertListEqual(output, self.data)
+
+    def test_checkpointing_from_start(self):
+        for _ in range(10):
+            next(self.prefetched)
+        self.prefetched.setstate(None)
+        self.assertEqual(next(self.prefetched), 0)
+
+    def test_checkpointing_at_end(self):
+        for _ in range(len(self.data)):
+            next(self.prefetched)
+        checkpoint = self.prefetched.getstate()
+        self.prefetched.setstate(checkpoint)
+        self.assertRaises(StopIteration, self.prefetched.__next__)
 
 
 class Testchunked_dataset_iterator(TestBase):
