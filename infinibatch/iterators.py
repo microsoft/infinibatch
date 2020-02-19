@@ -6,8 +6,11 @@ from itertools import cycle, islice
 import os
 from queue import Full, Queue
 from random import Random
-from threading import Event, Thread
+from threading import Thread
 from typing import Any, Callable, Iterable, Iterator, Generator, List, Tuple, NamedTuple, Optional, Union
+
+
+from .closablequeue import ClosableQueue, ClosedException
 
 
 """
@@ -524,14 +527,11 @@ class PrefetchIterator(CheckpointableIterator):
     Args:
         source: checkpointable iterator to recur over
         buffer_size: size of the queue between the threads
-        timeout: number of seconds the prefetching thread should wait
-                 when the queue is full before checking again whether it should terminate
     """
-    def __init__(self, source: CheckpointableIterator, buffer_size: int=1000, timeout_seconds: float=0.1):
+    def __init__(self, source: CheckpointableIterator, buffer_size: int=1000):
         self._source: CheckpointableIterator = source
         self._buffer_size: int = buffer_size
-        self._timeout_seconds: float = timeout_seconds
-        self._stop_event: Event = Event()
+        self._queue: Optional[ClosableQueue] = None
         self._thread: Optional[Thread] = None
         self.setstate(None)
         
@@ -540,68 +540,51 @@ class PrefetchIterator(CheckpointableIterator):
                 'item_offset' : self._item_offset  }
 
     def setstate(self, checkpoint: Optional[NamedTuple]):
-        if self._thread is not None:  # if there is a prefetching thread running, stop it and wait for it to terminate
-            self._stop_event.set()
+        if self._thread is not None:  # if there is a prefetching thread running, close the queue and wait for the thread to terminate
+            assert self._queue is not None
+            self._queue.close()
             self._thread.join()
-            self._stop_event.clear()
         
         self._source_state = checkpoint['source_state'] if checkpoint is not None else None
         self._item_offset = checkpoint['item_offset'] if checkpoint is not None else 0
 
         self._source.setstate(self._source_state)
 
-        self._queue = Queue(maxsize=self._buffer_size)  # clear queue
-        self._thread = Thread(target=self._prefetch, daemon=True)  # make thread daemonic so it is killed when the main program terminates
+        self._queue = ClosableQueue(maxsize=self._buffer_size)  # clear queue
+        # make thread daemonic so it is killed when the main program terminates
+        self._thread = Thread(target=self._prefetch, args=(self._source, self._item_offset, self._buffer_size, self._queue), daemon=True)
         self._thread.start()
 
-    def _prefetch(self):
-        # this function specified the behavior of the prefetching thread
-        # all other functions should only be called in the main thread
+    @staticmethod
+    def _prefetch(source, item_offset, buffer_size, queue):  # this function specifies the behavior of the prefetching thread
+        _advance_iterator(source, item_offset)  # skip to checkpoint
 
-        # skip to checkpoint
-        local_item_offset = _advance_iterator(self._source, self._item_offset)
-
-        # the variable msg (message) below normally is a tuple (item, source_state) where:
-        # - item is a data item from the source iterator 
-        # - source_state is a checkpoint from the source iterator or None
-        # a source_state is included at the END of each window of length _buffer_size,
-        # otherwise the element of the tuple is None
-        # a checkpoint in a message always indicates the state of the source iterator
-        # AFTER the item that is the first element of the tuple was retrieved
-        #
-        # msg can also take two additional values:
-        # - msg == None indicates that a new messages should be created
-        # by fetching a data item and checkpoint (if necessary) from the source iterator
-        # - msg == StopIteration indicates that the source iterator is depleted and this should be communicated to the main thread
-        # if msg != None at the beginning of the while loop below,
-        # that means that a message could not be added to the queue because the put-operation timed out
-        # this mechanism is necessary to allow the prefetching thread to terminate gracefully even if the queue is full
-
-        msg = None  # set msg to None so that new msg is created in the first iteration
-        while not self._stop_event.is_set():
-            if msg is None:
-                try:
-                    item = next(self._source)
-                    local_source_state = None
-                    if local_item_offset == self._buffer_size - 1:  # send a new source state a the END of each window of length _buffer_size
-                        local_source_state = self._source.getstate()
-                    local_item_offset = (local_item_offset + 1) % self._buffer_size
-                    msg = (item, local_source_state)
-                except StopIteration:
-                    msg = StopIteration  # set msg to StopIteration to signal that _source has been depleted
+        while True:
             try:
-                self._queue.put(msg, timeout=self._timeout_seconds)  # try to put msg in queue for _timeout seconds
-                # when the execution reaches this point, the thread was succesfull in adding the msg to the queue
-                if msg is StopIteration:
-                    return  # _source has been depleted and the main thread has been informed. terminate
-                msg = None  # set msg to None so that new item is fetched in next iteration
-            except Full:
-                pass  # the message could not be added to the queue because it was full, try again in next iteration
+                item = next(source)
+            except StopIteration:
+                queue.close()
+                return
+            
+            if item_offset == buffer_size - 1:  # send a new source state a the END of each window of length _buffer_size
+                source_state = source.getstate()
+                item_offset = 0
+            else:
+                source_state = None
+                item_offset += 1
+            msg = (item, source_state)
+
+            try:
+                queue.put(msg)
+            except ClosedException:
+                return
 
     def __next__(self):
-        msg = self._queue.get()
-        if msg is StopIteration:  # _source has been depleted
+        try:
+            msg = self._queue.get()
+        except ClosedException:
             raise StopIteration
+
         item, prefetch_source_state = msg
         if prefetch_source_state is not None:
             assert self._item_offset == self._buffer_size - 1  # we expect a new source state at then END of each window of length _buffer_size
