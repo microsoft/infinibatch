@@ -524,7 +524,8 @@ class PrefetchIterator(CheckpointableIterator):
     Args:
         source: checkpointable iterator to recur over
         buffer_size: size of the queue between the threads
-        timeout: number of seconds the prefetching thread should wait when the queue is full before checking again whether it should terminate
+        timeout: number of seconds the prefetching thread should wait
+                 when the queue is full before checking again whether it should terminate
     """
     def __init__(self, source: CheckpointableIterator, buffer_size: int=1000, timeout_seconds: float=0.1):
         self._source: CheckpointableIterator = source
@@ -563,12 +564,14 @@ class PrefetchIterator(CheckpointableIterator):
         # the variable msg (message) below normally is a tuple (item, source_state) where:
         # - item is a data item from the source iterator 
         # - source_state is a checkpoint from the source iterator or None
-        # a source_state is included at the END of each window of length _buffer_size, otherwise the element of the tuple is None
+        # a source_state is included at the END of each window of length _buffer_size,
+        # otherwise the element of the tuple is None
         # a checkpoint in a message always indicates the state of the source iterator
         # AFTER the item that is the first element of the tuple was retrieved
         #
         # msg can also take two additional values:
-        # - msg == None indicates that a new messages should be created by fetching a data item and checkpoint (if necessary) from the source iterator
+        # - msg == None indicates that a new messages should be created
+        # by fetching a data item and checkpoint (if necessary) from the source iterator
         # - msg == StopIteration indicates that the source iterator is depleted and this should be communicated to the main thread
         # if msg != None at the beginning of the while loop below,
         # that means that a message could not be added to the queue because the put-operation timed out
