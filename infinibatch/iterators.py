@@ -4,8 +4,13 @@ import copy
 import gzip
 from itertools import cycle, islice
 import os
+from queue import Full, Queue
 from random import Random
+from threading import Thread
 from typing import Any, Callable, Iterable, Iterator, Generator, List, Tuple, NamedTuple, Optional, Union
+
+
+from .closablequeue import ClosableQueue, ClosedException
 
 
 """
@@ -35,6 +40,7 @@ Features:
 #  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
 #  - add type checks to guarantee that input iterators are checkpointable
 #  - change all convenience functions back to true classes, using a wrapper class
+#  - introduce consistent naming for input iterators. good choices would be source or source_iterator
 
 # TODO later:
 # - make iterator pipeline work for streaming data
@@ -513,6 +519,82 @@ def SamplingRandomMapIterator(source: CheckpointableIterator, transform: Callabl
         output = transform(_random, item)
         return _random.getstate(), output
     return RecurrentIterator(source, _step_function, initial_state=_random.getstate())
+
+
+class PrefetchIterator(CheckpointableIterator):
+    """
+    An iterator prefetching data into a buffer on a seperate thread to smooth out IO latency.
+
+    Args:
+        source: checkpointable iterator to recur over
+        buffer_size: size of the queue between the threads
+    """
+    def __init__(self, source: CheckpointableIterator, buffer_size: int=1000):
+        self._source: CheckpointableIterator = source
+        self._buffer_size: int = buffer_size
+        self._queue: Optional[ClosableQueue] = None
+        self._thread: Optional[Thread] = None
+        self.setstate(None)
+        
+    def getstate(self) -> NamedTuple:
+        return {'source_state': self._source_state,
+                'item_offset' : self._item_offset  }
+
+    def setstate(self, checkpoint: Optional[NamedTuple]):
+        if self._thread is not None:  # if there is a prefetching thread running, close the queue and wait for the thread to terminate
+            assert self._queue is not None
+            self._queue.close()
+            self._thread.join()
+        
+        self._source_state = checkpoint['source_state'] if checkpoint is not None else None
+        self._item_offset = checkpoint['item_offset'] if checkpoint is not None else 0
+
+        self._source.setstate(self._source_state)
+
+        self._queue = ClosableQueue(maxsize=self._buffer_size)  # clear queue
+        # make thread daemonic so it is killed when the main program terminates
+        self._thread = Thread(target=self._prefetch_thread_fn, args=(self._source, self._item_offset, self._buffer_size, self._queue), daemon=True)
+        self._thread.start()
+
+    @staticmethod
+    def _prefetch_thread_fn(source, item_offset, buffer_size, queue):  # behavior of the prefetching thread, only call from that thread!
+        _advance_iterator(source, item_offset)  # skip to checkpoint
+
+        while True:
+            try:
+                item = next(source)
+            except StopIteration:
+                queue.close()
+                return
+            
+            if item_offset == buffer_size - 1:  # send a new source state a the END of each window of length _buffer_size
+                source_state = source.getstate()  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
+                item_offset = 0
+            else:
+                source_state = None
+                item_offset += 1
+            msg = (item, source_state)
+
+            try:
+                queue.put(msg)
+            except ClosedException:
+                return
+
+    def __next__(self):
+        try:
+            msg = self._queue.get()
+        except ClosedException:
+            raise StopIteration
+
+        item, prefetch_source_state = msg
+        if prefetch_source_state is not None:
+            assert self._item_offset == self._buffer_size - 1  # we expect a new source state at then END of each window of length _buffer_size
+            self._source_state = prefetch_source_state
+            self._item_offset = 0
+        else:
+            self._item_offset = self._item_offset + 1
+            assert self._item_offset < self._buffer_size
+        return item  # for debugging, its useful to return msg instead of item
 
 
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
