@@ -330,8 +330,12 @@ class ZipIterator(CheckpointableIterator):
         return {'input_states': tuple(iterator.getstate() for iterator in self._source_iterators)}
 
     def setstate(self, checkpoint: Optional[Dict]):
-        for iterator, state in zip(self._source_iterators, checkpoint['input_states']):
-            iterator.setstate(state)
+        if checkpoint is None:
+            for iterator in self._source_iterators:
+                iterator.setstate(None)
+        else:
+            for iterator, state in zip(self._source_iterators, checkpoint['input_states']):
+                iterator.setstate(state)
 
     def __next__(self):
         res = []  # (note: can't use a generator expression, as it gets confused when a next() call raises StopIteration)
