@@ -35,7 +35,6 @@ Features:
 
 
 # TODO for next release:
-#  - implement prefetching thread (possibly at the end of the pipeline) to avoid latency spikes
 #  - implement new version of BufferedShuffleIterator that has smaller checkpoints
 #  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
 #  - add type checks to guarantee that input iterators are checkpointable
