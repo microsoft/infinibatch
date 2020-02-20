@@ -40,6 +40,7 @@ Features:
 #  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
 #  - add type checks to guarantee that input iterators are checkpointable
 #  - change all convenience functions back to true classes, using a wrapper class
+#  - introduce consistent naming for input iterators. good choices would be source or source_iterator
 
 # TODO later:
 # - make iterator pipeline work for streaming data
@@ -552,11 +553,11 @@ class PrefetchIterator(CheckpointableIterator):
 
         self._queue = ClosableQueue(maxsize=self._buffer_size)  # clear queue
         # make thread daemonic so it is killed when the main program terminates
-        self._thread = Thread(target=self._prefetch, args=(self._source, self._item_offset, self._buffer_size, self._queue), daemon=True)
+        self._thread = Thread(target=self._prefetch_thread_fn, args=(self._source, self._item_offset, self._buffer_size, self._queue), daemon=True)
         self._thread.start()
 
     @staticmethod
-    def _prefetch(source, item_offset, buffer_size, queue):  # this function specifies the behavior of the prefetching thread
+    def _prefetch_thread_fn(source, item_offset, buffer_size, queue):  # behavior of the prefetching thread, only call from that thread!
         _advance_iterator(source, item_offset)  # skip to checkpoint
 
         while True:
@@ -567,7 +568,7 @@ class PrefetchIterator(CheckpointableIterator):
                 return
             
             if item_offset == buffer_size - 1:  # send a new source state a the END of each window of length _buffer_size
-                source_state = source.getstate()
+                source_state = source.getstate()  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
                 item_offset = 0
             else:
                 source_state = None
