@@ -164,10 +164,10 @@ class InfinitePermutationIterator(CheckpointableIterator):
                     self._item_count += 1  # record how many items we have iterated over in this pass over the items
                     if (self._item_count-1) % self._num_instances == self._instance_rank:  # build-in islice facility
                         yield item
-        self._generator = _generate()
+        self._iterator = _generate()
 
     def __next__(self):
-        return next(self._generator)
+        return next(self._iterator)
 
 
 class SelectManyIterator(CheckpointableIterator):
@@ -259,7 +259,7 @@ class BufferedShuffleIterator(CheckpointableIterator):
             # @TODO: Can we add a comment how the flush part is handled?
         else:
             self._source_iterator.setstate(None)
-        self._generator = self._generate()
+        self._iterator = self._generate()
 
     def _generate(self) -> Iterator:
         # shuffle data with a buffer:
@@ -285,7 +285,7 @@ class BufferedShuffleIterator(CheckpointableIterator):
                 yield item
 
     def __next__(self):
-        return next(self._generator)
+        return next(self._iterator)
 
 
 class MapIterator(CheckpointableIterator):
@@ -369,7 +369,7 @@ class WindowedIterator(CheckpointableIterator):
         self._input_state = checkpoint['input_state'] if checkpoint else None
         self._item_index  = checkpoint['item_index']  if checkpoint else 0
         self._source_iterator.setstate(self._input_state)
-        self._generator = self._generate()
+        self._iterator = self._generate()
 
     def _fifo_slice(self, i):  # returns a window into the FIFO beginning at i
         # @TODO: for efficiency, make this a slice view
@@ -395,7 +395,7 @@ class WindowedIterator(CheckpointableIterator):
             self._item_index = 0
 
     def __next__(self):
-        return next(self._generator)
+        return next(self._iterator)
 
 
 class RandomIterator(CheckpointableIterator):
@@ -593,7 +593,7 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     _source_iterator: Iterator[Any]   # iterator into _source
     _random: Random             # random generator
     _source_exhausted: bool    # set to True once we hit StopIteration on source
-    _batch_iter: Iterator[Any]  # iterator into current set of batches
+    _iterator: Iterator[Any]  # iterator into current set of batches
     _input_state: Dict    # state of input before reading the current set of batches
     _num_served: int            # number of batches served from the current set of batches
 
@@ -656,7 +656,7 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
                 for batch in batches:
                     self._num_served += 1
                     yield batch
-        self._batch_iter = _generate()
+        self._iterator = _generate()
 
     def _create_batches(self, items: List[Any]) -> List[List[Any]]:  # helper to form batches from a list of items
             # sort by length, longest first
@@ -678,4 +678,4 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
             return batches
 
     def __next__(self):
-        return next(self._batch_iter)
+        return next(self._iterator)
