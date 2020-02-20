@@ -522,7 +522,7 @@ class PrefetchIterator(CheckpointableIterator):
             self._thread.join()
         
         self._source_state = checkpoint['source_state'] if checkpoint is not None else None
-        self._item_offset = checkpoint['item_offset'] if checkpoint is not None else 0
+        self._item_offset  = checkpoint['item_offset' ] if checkpoint is not None else 0
 
         self._source_iterator.setstate(self._source_state)
 
@@ -590,12 +590,12 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     _read_ahead: int
 
     # state
-    _source_iterator: Iterator[Any]   # iterator into _source
-    _random: Random             # random generator
-    _source_exhausted: bool    # set to True once we hit StopIteration on source
-    _iterator: Iterator[Any]  # iterator into current set of batches
-    _input_state: Dict    # state of input before reading the current set of batches
-    _num_served: int            # number of batches served from the current set of batches
+    _source_iterator: Iterator[Any]  # iterator into _source
+    _random: Random                  # random generator
+    _source_exhausted: bool          # set to True once we hit StopIteration on source
+    _iterator: Iterator[Any]         # iterator into current set of batches
+    _input_state: Dict               # state of input before reading the current set of batches
+    _num_served: int                 # number of batches served from the current set of batches
 
     def __init__(self, source_iterator: CheckpointableIterator, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: Optional[int]=None):
         """
