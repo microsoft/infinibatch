@@ -29,8 +29,6 @@ Features:
   * support automatic bucketed batching with dynamic batch sizes
   * pre-fetching thread
   * composable, as to support for complex batching, e.g. negative samples from multiple documents
-
-@TODO: The pre-fetching thread is not supported yet.
 """
 
 
