@@ -36,7 +36,7 @@ class TestCheckpointableIterator:
         self.assertListEqual(list(self.iterator), self.expected_result)
 
     def test_checkpointing_in_middle(self):
-        result = [next(self.iterator) for _ in range(len(self.expected_result) // 2)]
+        result = [next(self.iterator) for _ in range(len(self.expected_result) // 3)]
         self.iterator.setstate(self.iterator.getstate())
         result += [item for item in self.iterator]
         self.assertListEqual(result, self.expected_result)
@@ -147,7 +147,7 @@ class TestInfinitePermutationIterator(TestBase):
 
 class TestNativeCheckpointableIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
-        self.expected_result = list(range(42))
+        self.expected_result = list(range(53))
         self.iterator = NativeCheckpointableIterator(self.expected_result)
 
     def test_iterator_exception(self):
@@ -156,7 +156,7 @@ class TestNativeCheckpointableIterator(unittest.TestCase, TestCheckpointableIter
 
 class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
-        data = list(range(42))
+        data = list(range(53))
 
         self.expected_result = [0]
         for i in data[1:]:
@@ -171,7 +171,7 @@ class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
 
 class TestSamplingRandomMapIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
-        data = list(range(42))
+        data = list(range(53))
         def transform(random: Random, item: int):
             return item + random.random()
 
@@ -243,7 +243,7 @@ class TestBufferedShuffleIterator(TestBase):
 
 class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
-        data = list(range(42))
+        data = list(range(53))
         def fun(n):
             return n + 1
         self.expected_result = [fun(n) for n in data]
@@ -252,7 +252,7 @@ class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
 
 class TestZipIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
-        data1 = list(range(42))
+        data1 = list(range(53))
         data2 = [n * n for n in data1]
         self.expected_result = list(zip(data1, data2))
         self.iterator = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
@@ -301,7 +301,7 @@ class TestRandomIterator(TestBase):
 
 class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
-        self.expected_result = list(range(42))
+        self.expected_result = list(range(53))
         source_iterator = NativeCheckpointableIterator(self.expected_result)
         self.iterator = PrefetchIterator(source_iterator, buffer_size=13)
 
