@@ -18,6 +18,7 @@ from infinibatch.datasets import chunked_dataset_iterator
 
 # TODO:
 #  - refactor test cases that do not rely on TestCheckpointableIterator
+#  - make sure every iterator is tested for correct checkpointing at the end of the iterator
 
 
 class TestCheckpointableIterator:
