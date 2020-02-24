@@ -35,7 +35,6 @@ Features:
 # TODO for next release:
 #  - implement new version of BufferedShuffleIterator that has smaller checkpoints
 #  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
-#  - add type checks to guarantee that input iterators are checkpointable
 #  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
@@ -182,6 +181,8 @@ class SelectManyIterator(CheckpointableIterator):
                                  return self-iterables, such as iterators and generator expressions.
             source_iterator: iterable of paths to chunk files
         """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator: CheckpointableIterator = source_iterator
         self._collection_selector: Callable[[Any], Iterable] = collection_selector
         self.setstate(None)
@@ -223,6 +224,8 @@ def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator):
     Args:
         chunk_file_paths: CheckpointableIterator of paths to chunk files
     """
+    if not isinstance(chunk_file_paths, CheckpointableIterator):
+        raise ValueError('chunk_file_paths has to be a CheckpointableIterator')
     def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
         #print("Reading chunk file", textfile_path, file=sys.stderr)
         with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
@@ -241,6 +244,8 @@ class BufferedShuffleIterator(CheckpointableIterator):
             buffer_size: size of the buffer in number of items used for shuffling
             seed: random seed used for shuffling (or None)
         """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator
         self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
         self._random = Random(seed)
@@ -298,6 +303,8 @@ class MapIterator(CheckpointableIterator):
             source_iterator: checkpointable iterator
             transform: function to be applied to each data item
         """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator
         self._transform = transform
 
@@ -322,6 +329,9 @@ class ZipIterator(CheckpointableIterator):
         Args:
             source_iterators: list of iterators to zip, item by item
         """
+        for source_iterator in source_iterators:
+            if not isinstance(source_iterator, CheckpointableIterator):
+                raise ValueError('all iterators in source_iterators have to be CheckpointableIterator')
         self._source_iterators: List[CheckpointableIterator] = source_iterators
 
     def getstate(self) -> Dict:
@@ -357,6 +367,8 @@ class WindowedIterator(CheckpointableIterator):
         Args:
             source_iterator: checkpointable input iterators
         """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator: CheckpointableIterator = source_iterator
         self._width: int = width
         self.setstate(None)
@@ -454,6 +466,8 @@ class RecurrentIterator(CheckpointableIterator):
             step_function: user-supplied function with signature step_function(state, item) -> (new_state, output)
             initial_state: initial state to be passed to the step_function upon first invocation
         """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator: CheckpointableIterator = source_iterator
         self._step_function: Callable[[Any,Any], Tuple[Any,Any]] = step_function
         self._initial_state: Any = initial_state
@@ -505,6 +519,8 @@ class PrefetchIterator(CheckpointableIterator):
         buffer_size: size of the queue between the threads
     """
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int=1000):
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator: CheckpointableIterator = source_iterator
         self._buffer_size: int = buffer_size
         self._queue: Optional[ClosableQueue] = None
@@ -607,6 +623,8 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
             shuffle: Pass False to not randomize the batches. (default: True)
             seed: Random seed for batch shuffling.
         """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
         # keep arguments
         self._key = key
         self._batch_size = batch_size
