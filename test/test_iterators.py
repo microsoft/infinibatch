@@ -11,8 +11,42 @@ import pickle
 from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, WindowedIterator, \
-                                  RandomIterator, RecurrentIterator, SamplingRandomMapIterator
+                                  RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
+                                  PrefetchIterator
 from infinibatch.datasets import chunked_dataset_iterator
+
+
+# TODO:
+#  - refactor test cases that do not rely on TestCheckpointableIterator
+#  - make sure every iterator is tested for correct checkpointing at the end of the iterator
+
+
+class TestCheckpointableIterator:
+    """
+    These are common test cases for CheckointableIterators
+    
+    Inherit from this class and set self.iterator and self.expected_result in the setUp function to use.
+    """
+    def test_basic(self):
+        self.assertListEqual(list(self.iterator), self.expected_result)
+
+    def test_checkpointing_from_start(self):
+        for _ in range(len(self.expected_result)):
+            next(self.iterator)
+        self.iterator.setstate(None)
+        self.assertListEqual(list(self.iterator), self.expected_result)
+
+    def test_checkpointing_in_middle(self):
+        result = [next(self.iterator) for _ in range(len(self.expected_result) // 3)]
+        self.iterator.setstate(self.iterator.getstate())
+        result += [item for item in self.iterator]
+        self.assertListEqual(result, self.expected_result)
+
+    def test_checkpointing_at_end(self):
+        for _ in range(len(self.expected_result)):
+            next(self.iterator)
+        self.iterator.setstate(self.iterator.getstate())
+        self.assertRaises(StopIteration, self.iterator.__next__)
 
 
 class TestBase(unittest.TestCase):
@@ -112,66 +146,42 @@ class TestInfinitePermutationIterator(TestBase):
             self.assertTrue(items1a == items1c)
 
 
-class TestNativeCheckpointableIterator(TestBase):
-    def test(self):
-        # go half-way through data and create checkpoint
-        it = NativeCheckpointableIterator(list(range(100)))
-        items = list(itertools.islice(it, 50))
-        checkpoint = it.getstate()
-
-        # resume from checkpoint
-        it = NativeCheckpointableIterator(list(range(100)))
-        it.setstate(checkpoint)
-        items += list(it)
-
-        self.assertListEqual(items, list(range(100)))
+class TestNativeCheckpointableIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        self.expected_result = list(range(53))
+        self.iterator = NativeCheckpointableIterator(self.expected_result)
 
     def test_iterator_exception(self):
         self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
 
 
-# @TODO: Move all tests of simple operators to the top, so that they can run first
-class TestRecurrentIterator(TestBase):
-    def test(self):
-        n = 100
-        seq = list(range(n))
+class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        data = list(range(53))
+
+        self.expected_result = [0]
+        for i in data[1:]:
+            self.expected_result.append(self.expected_result[-1] + i)
+
         def step_function(prev_state, item):
             output = item + prev_state
             new_state = output
             return new_state, output
-        it = RecurrentIterator(NativeCheckpointableIterator(seq), step_function, initial_state = 0)
-        actual0 = list(itertools.islice(it, n * 3 // 10))
-        checkpoint = it.getstate()
-        actual1a = list(it)
-        actual = actual0 + actual1a
-        it.setstate(checkpoint)
-        actual1b = list(it)
-        expected = [0]
-        for i in seq[1:]:
-            expected.append(expected[-1] + i)
-        self.assertListEqual(actual,   expected)  # basic operation
-        self.assertListEqual(actual1a, actual1b)  # checkpointing
+        self.iterator = RecurrentIterator(NativeCheckpointableIterator(data), step_function, initial_state = 0)
 
 
-class TestSamplingRandomMapIterator(TestBase):
-    def test(self):
-        for seq in (range(100), [[1,2,3], [4,5], [6,7,8]]):
-            n = len(seq)
-            def _transform(random: Random, item: Union[int,Iterable]):
-                if isinstance(item, int):  # first test case
-                    return item + random.random()
-                else:  # second test case
-                    output = []
-                    for i in item:
-                        output.append(i + random.random())
-                    return output
-            it = SamplingRandomMapIterator(NativeCheckpointableIterator(seq), transform=_transform, seed=1)
-            actual0 = list(itertools.islice(it, n * 3 // 10))
-            checkpoint = it.getstate()
-            actual1a = list(it)
-            it.setstate(checkpoint)
-            actual1b = list(it)
-            self.assertListEqual(actual1a, actual1b)
+class TestSamplingRandomMapIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        data = list(range(53))
+        def transform(random: Random, item: int):
+            return item + random.random()
+
+        seed = 1
+        random = Random()
+        random.seed(seed)
+        self.expected_result = [n + random.random() for n in data]
+
+        self.iterator = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=transform, seed=seed)
 
 
 class TestChunkedReadlinesIterator(TestBase):
@@ -232,25 +242,21 @@ class TestBufferedShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
-class TestMapIterator(TestBase):
-    def test_transform(self):
-        items = list(MapIterator(NativeCheckpointableIterator(range(100)), lambda x: x + 1))
-        self.assertListEqual(items, list(range(1, 101)))
+class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        data = list(range(53))
+        def fun(n):
+            return n + 1
+        self.expected_result = [fun(n) for n in data]
+        self.iterator = MapIterator(NativeCheckpointableIterator(data), fun)
 
 
-class TestZipIterator(TestBase):
-    def test(self):
-        n = 100
-        seq1 = list(range(n))
-        seq2 = list(i * i for i in range(n))
-        it = ZipIterator(NativeCheckpointableIterator(seq1), NativeCheckpointableIterator(seq2))
-        items0 = list(itertools.islice(it, n * 3 // 10))
-        checkpoint = it.getstate()
-        items1a = list(it)
-        it.setstate(checkpoint)
-        items1b = list(it)
-        self.assertListEqual(items0 + items1a, list(zip(seq1, seq2)))  # basic function
-        self.assertListEqual(items1a, items1b)                         # checkpointing
+class TestZipIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        data1 = list(range(53))
+        data2 = [n * n for n in data1]
+        self.expected_result = list(zip(data1, data2))
+        self.iterator = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
 
 
 class TestWindowedIterator(TestBase):
@@ -292,6 +298,13 @@ class TestRandomIterator(TestBase):
 #        it.setstate(checkpoint)
 #        items1b = list(itertools.islice(it, n * 7 // 10))
 #        self.assertListEqual(items1a, items1b)
+
+
+class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        self.expected_result = list(range(53))
+        source_iterator = NativeCheckpointableIterator(self.expected_result)
+        self.iterator = PrefetchIterator(source_iterator, buffer_size=13)
 
 
 class Testchunked_dataset_iterator(TestBase):
