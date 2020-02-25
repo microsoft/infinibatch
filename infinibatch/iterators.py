@@ -227,7 +227,7 @@ def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator):
     if not isinstance(chunk_file_paths, CheckpointableIterator):
         raise ValueError('chunk_file_paths has to be a CheckpointableIterator')
     def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
-        #print("Reading chunk file", textfile_path, file=sys.stderr)
+        #print("ChunkedReadlinesIterator: reading", textfile_path, file=sys.stderr)
         with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
             return iter(f.read().splitlines())
     return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=readlines_from_zipped)
@@ -599,19 +599,6 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
 
     This is based on Marian NMT's BatchGenerator.
     """
-    # @TODO: We had agreed to remove the explicit member declarations, and instead implicitly declare them in __init__ upon assignment.
-    # parameters
-    #_key: Callable[[Any], Any]
-    #_batch_size: Union[int,Callable[[Any], int]]
-    #_read_ahead: int
-
-    # state
-    #_source_iterator: Iterator[Any]  # iterator into _source
-    #_random: Random                  # random generator
-    #_source_exhausted: bool          # set to True once we hit StopIteration on source
-    #_iterator: Iterator[Any]         # iterator into current set of batches
-    #_source_state: Dict              # state of input before reading the current set of batches
-    #_num_batches_yielded: int        # number of batches served from the current set of batches
 
     def __init__(self, source_iterator: CheckpointableIterator, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: Optional[int]=None):
         """
@@ -626,16 +613,16 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
         # keep arguments
-        self._key = key
-        self._batch_size = batch_size
-        self._read_ahead = read_ahead
+        self._key = key                # type: Callable[[Any], Any]
+        self._batch_size = batch_size  # type: Union[int,Callable[[Any], int]]
+        self._read_ahead = read_ahead  # type: int
         # initialize state
         self._random = None
         if shuffle:
-            self._random = Random()
+            self._random = Random()                    # type: Random
             if seed is not None:
                 self._random.seed(seed)
-        self._source_iterator = iter(source_iterator)
+        self._source_iterator = iter(source_iterator)  # type: CheckpointableIterator
         self.setstate(None)
 
     def getstate(self):
@@ -644,14 +631,14 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
                 'num_served':   self._num_batches_yielded}
 
     def setstate(self, checkpoint: Optional[Dict]):
-        self._source_state        = checkpoint['source_state'] if checkpoint else None
-        self._random_state        = checkpoint['random_state'] if checkpoint else None
-        self._num_batches_yielded = checkpoint['num_served']   if checkpoint else 0
+        self._source_state        = checkpoint['source_state'] if checkpoint else None  # type: Dict  -- state of input before reading the current set of batches
+        self._random_state        = checkpoint['random_state'] if checkpoint else None  # type: Any   -- state of random generator at _source_state
+        self._num_batches_yielded = checkpoint['num_served']   if checkpoint else 0     # type: int   -- number of batches served from the current set of batches
         # checkpointing: restore to start of current set of batches
         self._source_iterator.setstate(self._source_state)
         if self._random_state:
             self._random.setstate(self._random_state)
-        self._source_exhausted = False
+        self._source_exhausted = False  # type: bool  -- set to True once we hit StopIteration on source
         def _generate():
             skip_to_checkpoint = self._num_batches_yielded
             source_exhausted = False
@@ -674,7 +661,7 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
                 for batch in batches:
                     self._num_batches_yielded += 1
                     yield batch
-        self._iterator = _generate()
+        self._iterator = _generate()  # type: Iterator  -- iterator into current set of batches
 
     def _create_batches(self, items: List[Any]) -> List[List[Any]]:  # helper to form batches from a list of items
             # sort by length, longest first
