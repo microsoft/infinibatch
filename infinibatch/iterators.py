@@ -199,8 +199,8 @@ class SelectManyIterator(CheckpointableIterator):
                                  return self-iterables, such as iterators and generator expressions.
             source_items: iterable of paths to chunk files
         """
-        self._source_items: CheckpointableIterator = source_items
-        self._collection_selector: Callable[[Any], Iterable] = collection_selector
+        self._source_items = source_items                # type: CheckpointableIterator
+        self._collection_selector = collection_selector  # type: Callable[[Any], Iterable]
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
@@ -341,7 +341,7 @@ class ZipIterator(CheckpointableIterator):
         Args:
             iterators: list of iterators to zip, item by item
         """
-        self._iterators: List[CheckpointableIterator] = iterators
+        self._iterators = iterators  # type: List[CheckpointableIterator]
 
     def getstate(self) -> NamedTuple:
         return _dict_from(
@@ -373,8 +373,8 @@ class WindowedIterator(CheckpointableIterator):
         Args:
             source: checkpointable input iterators
         """
-        self._source: CheckpointableIterator = source
-        self._width: int = width
+        self._source = source  # type: CheckpointableIterator
+        self._width = width    # type: int
         self.setstate(None)
 
     def getstate(self) -> NamedTuple:
@@ -426,7 +426,7 @@ class RandomIterator(CheckpointableIterator):
         Args:
             seed: Random seed.
         """
-        self._random: Random = Random()
+        self._random = Random()  # type: Random
         if seed is not None:
             self._random.seed(seed)
 
@@ -472,9 +472,9 @@ class RecurrentIterator(CheckpointableIterator):
             step_function: user-supplied function with signature step_function(state, item) -> (new_state, output)
             initial_state: initial state to be passed to the step_function upon first invocation
         """
-        self._source: CheckpointableIterator = source
-        self._step_function: Callable[[Any,Any], Tuple[Any,Any]] = step_function
-        self._initial_state: Any = initial_state
+        self._source = source                # type: CheckpointableIterator
+        self._step_function = step_function  # type: Callable[[Any,Any], Tuple[Any,Any]]
+        self._initial_state = initial_state  # type: Any
         self.setstate(None)
     
     def getstate(self):
@@ -528,17 +528,17 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """
     # @TODO: We had agreed to remove the explicit member declarations, and instead implicitly declare them in __init__ upon assignment.
     # parameters
-    _key: Callable[[Any], Any]
-    _batch_size: Union[int,Callable[[Any], int]]
-    _read_ahead: int
+    #_key: Callable[[Any], Any]
+    #_batch_size: Union[int,Callable[[Any], int]]
+    #_read_ahead: int
 
     # state
-    _data_iter: Iterator[Any]   # iterator into _source
-    _random: Random             # random generator
-    _source_exhausted: bool    # set to True once we hit StopIteration on source
-    _batch_iter: Iterator[Any]  # iterator into current set of batches
-    _input_state: NamedTuple    # state of input before reading the current set of batches
-    _num_served: int            # number of batches served from the current set of batches
+    #_data_iter: Iterator[Any]   # iterator into _source
+    #_random: Random             # random generator
+    #_source_exhausted: bool     # set to True once we hit StopIteration on source
+    #_batch_iter: Iterator[Any]  # iterator into current set of batches
+    #_input_state: NamedTuple    # state of input before reading the current set of batches
+    #_num_served: int            # number of batches served from the current set of batches
 
     def __init__(self, source, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: Optional[int]=None):
         """
@@ -609,8 +609,8 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
             batches = []
             for item in items:
                 if not cur_batch:
-                    batch_size: int = self._batch_size if isinstance(self._batch_size, int) else \
-                                      self._batch_size(item)
+                    batch_size = self._batch_size if isinstance(self._batch_size, int) else \
+                                 self._batch_size(item)
                     cur_batch = []
                 cur_batch.append(item)
                 if len(cur_batch) >= batch_size:  # this batch is full

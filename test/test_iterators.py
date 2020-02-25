@@ -68,7 +68,7 @@ class TestBase(unittest.TestCase):
 class TestInfinitePermutationIterator(TestBase):
     def test_repeat_once(self):
         # This tests that two consecutive iterations through the test data yields differently ordered sequences.
-        reader: Iterator[Any] = iter(InfinitePermutationIterator(self.flattened_test_data, 42))
+        reader = iter(InfinitePermutationIterator(self.flattened_test_data, 42))
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
@@ -76,7 +76,7 @@ class TestInfinitePermutationIterator(TestBase):
 
     def test_reiter_once(self):
         # This differs from test_repeat_once in that we use checkpoints.
-        reader: Iterable[Any] = InfinitePermutationIterator(self.flattened_test_data, 42)
+        reader = InfinitePermutationIterator(self.flattened_test_data, 42)
         checkpoint = reader.getstate()
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         reader.setstate(checkpoint)
