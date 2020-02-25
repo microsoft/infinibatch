@@ -183,8 +183,8 @@ class SelectManyIterator(CheckpointableIterator):
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
-        self._source_iterator: CheckpointableIterator = source_iterator
-        self._collection_selector: Callable[[Any], Iterable] = collection_selector
+        self._source_iterator = source_iterator          # type: CheckpointableIterator
+        self._collection_selector = collection_selector  # type: Callable[[Any], Iterable]
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -332,7 +332,7 @@ class ZipIterator(CheckpointableIterator):
         for source_iterator in source_iterators:
             if not isinstance(source_iterator, CheckpointableIterator):
                 raise ValueError('all iterators in source_iterators have to be CheckpointableIterator')
-        self._source_iterators: List[CheckpointableIterator] = source_iterators
+        self._source_iterators = source_iterators    # type: List[CheckpointableIterator]
 
     def getstate(self) -> Dict:
         return {'input_states': tuple(iterator.getstate() for iterator in self._source_iterators)}
@@ -369,8 +369,8 @@ class WindowedIterator(CheckpointableIterator):
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
-        self._source_iterator: CheckpointableIterator = source_iterator
-        self._width: int = width
+        self._source_iterator = source_iterator  # type: CheckpointableIterator
+        self._width = width                      # type: int
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -421,7 +421,7 @@ class RandomIterator(CheckpointableIterator):
         Args:
             seed: Random seed.
         """
-        self._random: Random = Random()
+        self._random = Random()  # type: Random
         if seed is not None:
             self._random.seed(seed)
 
@@ -468,9 +468,9 @@ class RecurrentIterator(CheckpointableIterator):
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
-        self._source_iterator: CheckpointableIterator = source_iterator
-        self._step_function: Callable[[Any,Any], Tuple[Any,Any]] = step_function
-        self._initial_state: Any = initial_state
+        self._source_iterator = source_iterator  # type: CheckpointableIterator
+        self._step_function = step_function      # type: Callable[[Any,Any], Tuple[Any,Any]]
+        self._initial_state = initial_state      # type: Any
         self.setstate(None)
     
     def getstate(self):
@@ -521,10 +521,10 @@ class PrefetchIterator(CheckpointableIterator):
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int=1000):
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
-        self._source_iterator: CheckpointableIterator = source_iterator
-        self._buffer_size: int = buffer_size
-        self._queue: Optional[ClosableQueue] = None
-        self._thread: Optional[Thread] = None
+        self._source_iterator = source_iterator  # type:CheckpointableIterator
+        self._buffer_size = buffer_size          # type: int
+        self._queue = None                       # type: Optional[ClosableQueue]
+        self._thread = None                      # type: Optional[Thread]
         self.setstate(None)
         
     def getstate(self) -> Dict:
@@ -601,17 +601,17 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """
     # @TODO: We had agreed to remove the explicit member declarations, and instead implicitly declare them in __init__ upon assignment.
     # parameters
-    _key: Callable[[Any], Any]
-    _batch_size: Union[int,Callable[[Any], int]]
-    _read_ahead: int
+    #_key: Callable[[Any], Any]
+    #_batch_size: Union[int,Callable[[Any], int]]
+    #_read_ahead: int
 
     # state
-    _source_iterator: Iterator[Any]  # iterator into _source
-    _random: Random                  # random generator
-    _source_exhausted: bool          # set to True once we hit StopIteration on source
-    _iterator: Iterator[Any]         # iterator into current set of batches
-    _source_state: Dict               # state of input before reading the current set of batches
-    _num_batches_yielded: int        # number of batches served from the current set of batches
+    #_source_iterator: Iterator[Any]  # iterator into _source
+    #_random: Random                  # random generator
+    #_source_exhausted: bool          # set to True once we hit StopIteration on source
+    #_iterator: Iterator[Any]         # iterator into current set of batches
+    #_source_state: Dict              # state of input before reading the current set of batches
+    #_num_batches_yielded: int        # number of batches served from the current set of batches
 
     def __init__(self, source_iterator: CheckpointableIterator, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: Optional[int]=None):
         """
@@ -684,8 +684,8 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
             batches = []
             for item in items:
                 if not cur_batch:
-                    batch_size: int = self._batch_size if isinstance(self._batch_size, int) else \
-                                      self._batch_size(item)
+                    batch_size = self._batch_size if isinstance(self._batch_size, int) else \
+                                 self._batch_size(item)
                     cur_batch = []
                 cur_batch.append(item)
                 if len(cur_batch) >= batch_size:  # this batch is full
