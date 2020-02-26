@@ -9,8 +9,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfi
 
 from infinibatch.datasets import chunked_dataset_iterator
 
-sets = sys.argv[1:]
+credential = None
+if sys.argv[1] == "--azure-storage-key":
+    credential = sys.argv[2]
+    sets = sys.argv[3:]
+else:
+    sets = sys.argv[1:]
 
-ds = chunked_dataset_iterator(sets, shuffle=True, buffer_size=1000000, seed=1)
+ds = chunked_dataset_iterator(sets, shuffle=True, buffer_size=1000000, seed=1, credentials=credential)
 for line in ds:
     print(line)

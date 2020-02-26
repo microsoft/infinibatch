@@ -8,6 +8,7 @@ from queue import Full, Queue
 from random import Random
 from threading import Thread
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
+from .files_and_blobs import read_utf8_file
 
 
 from .closablequeue import ClosableQueue, ClosedException
@@ -217,19 +218,19 @@ class SelectManyIterator(CheckpointableIterator):
 
 
 # @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator):
+def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator, credentials: Optional[Union[str,Dict[str,str]]] = None):
     """
     Reads text lines from zipped chunk files whose names are provided by an iterator.
 
     Args:
         chunk_file_paths: CheckpointableIterator of paths to chunk files
+        credentials: Azure credentials or None
     """
     if not isinstance(chunk_file_paths, CheckpointableIterator):
         raise ValueError('chunk_file_paths has to be a CheckpointableIterator')
     def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
         #print("ChunkedReadlinesIterator: reading", textfile_path, file=sys.stderr)
-        with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
-            return iter(f.read().splitlines())
+        return iter(read_utf8_file(textfile_path, credentials).splitlines())
     return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=readlines_from_zipped)
 
 
