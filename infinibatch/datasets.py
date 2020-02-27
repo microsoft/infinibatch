@@ -1,6 +1,6 @@
 from .iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, MapIterator
 from typing import Union, Iterable, Callable, Any, Optional
-import os
+import os, sys
 
 """
 This module contains common datasets, which are implemented as convenience functions that compose underlying Infinibatch iterators.
@@ -39,6 +39,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
         if subpath.is_file() and subpath.name.endswith('.gz')
     ]
     chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
+    #print("chunked_dataset_iterator: reading from", len(chunk_file_paths), "chunk files", file=sys.stderr)
     chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
     samples = ChunkedReadlinesIterator(chunks)
