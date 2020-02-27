@@ -62,14 +62,14 @@ def find_files(dir: str, ext: str, credentials: Optional[Union[str,Dict[str,str]
             raise
         account, container, blob_path = blob_data
 
-        print("find_files: enumerating blobs in", dir, file=sys.stderr)
+        print("find_files: enumerating blobs in", dir, file=sys.stderr, flush=True)
         # @BUGBUG: The prefix does not seem to have to start; seems it can also be a substring
         container_uri = "https://" + account + ".blob.core.windows.net/" + container
         container_client = ContainerClient.from_container_url(container_uri, credential=_get_azure_key(account, credentials))
         if not blob_path.endswith("/"):
             blob_path += "/"
         blob_uris = [container_uri + "/" + blob["name"] for blob in container_client.walk_blobs(blob_path, delimiter="") if (ext is None or blob["name"].endswith(ext))]
-        print("find files:", len(blob_uris), "blobs found", file=sys.stderr)
+        print("find_files:", len(blob_uris), "blobs found", file=sys.stderr, flush=True)
         for blob_name in blob_uris[:10]:
-            print(blob_name, file=sys.stderr)
+            print(blob_name, file=sys.stderr, flush=True)
         return blob_uris
