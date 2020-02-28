@@ -15,7 +15,7 @@ def bump_seed(seed: Optional[int], step = 1):
     return None if seed is None else seed + 1
 
 
-def chunked_dataset_iterator(paths: Union[str, Iterable[str]],# read_chunk_fn: Callable[[Any], Iterator],
+def chunked_dataset_iterator(paths: Union[str, Iterable[str]], read_chunk_fn: Callable[[Any], Iterator],
                              shuffle: bool=True, buffer_size: int=2**20,
                              transform: Callable[[Any],Any]=None,
                              prefetch_buffer_size: int=2**20,
@@ -29,7 +29,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]],# read_chunk_fn: C
 
     Args:
         paths: path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
-        read_chunk_fn: function to read a chunk into an iterator
+        read_chunk_fn: function(chunk_ref) to read a chunk's content into an iterator over its items
         shuffle: if true, the data is shuffled
         buffer_size: size of the buffer in number of samples / data items used for shuffling (default: 2**20)
         transform: transform to be applied to each data item (transform(Any) -> Any)
@@ -52,10 +52,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]],# read_chunk_fn: C
     #print("chunked_dataset_iterator: reading from", len(chunk_file_paths), "chunk files", file=sys.stderr)
     chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
-    def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
-        #print("chunked_dataset_iterator: reading", textfile_path, file=sys.stderr)
-        return iter(read_utf8_file(textfile_path, credentials).splitlines())
-    samples = SelectManyIterator(source_iterator=chunks, collection_selector=readlines_from_zipped)
+    samples = SelectManyIterator(source_iterator=chunks, collection_selector=read_chunk_fn)
     # wrap the I/O operation in a prefetch iterator
     # BUGBUG: This currently fails the test suite (although it seems to work)
     #if prefetch_buffer_size:

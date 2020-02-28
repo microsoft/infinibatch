@@ -1,4 +1,4 @@
-from typing import Union, Iterable, Callable, Any, Optional, Dict
+from typing import Union, Iterator, Callable, Any, Optional, Dict
 import os, sys, re
 import gzip
 
@@ -26,7 +26,7 @@ def _get_azure_key(storage_account: str, credentials: Optional[Union[str,Dict[st
         return credentials[storage_account]
 
 
-def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]):
+def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]) -> Iterator[str]:
     blob_data = _try_parse_azure_blob_uri(path)
     if blob_data is None:
         if path.endswith('.gz'):
