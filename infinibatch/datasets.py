@@ -1,7 +1,7 @@
-from .iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, PrefetchIterator, BufferedShuffleIterator, BlockShuffleIterator, MapIterator
-from .files_and_blobs import find_files
-from typing import Union, Iterable, Callable, Any, Optional, Dict
-import os
+from .iterators import InfinitePermutationIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockShuffleIterator, MapIterator
+from .files_and_blobs import find_files, read_utf8_file
+from typing import Union, Iterable, Iterator, Callable, Any, Optional, Dict
+import os, sys
 
 """
 This module contains common datasets, which are implemented as convenience functions that compose underlying Infinibatch iterators.
@@ -15,7 +15,8 @@ def bump_seed(seed: Optional[int], step = 1):
     return None if seed is None else seed + 1
 
 
-def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20,
+def chunked_dataset_iterator(paths: Union[str, Iterable[str]],# read_chunk_fn: Callable[[Any], Iterator],
+                             shuffle: bool=True, buffer_size: int=2**20,
                              transform: Callable[[Any],Any]=None,
                              prefetch_buffer_size: int=2**20,
                              seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0,
@@ -28,6 +29,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
 
     Args:
         paths: path, or list of paths, of directory containing dataset, i.e., a collection of .gz-files containing compressed text
+        read_chunk_fn: function to read a chunk into an iterator
         shuffle: if true, the data is shuffled
         buffer_size: size of the buffer in number of samples / data items used for shuffling (default: 2**20)
         transform: transform to be applied to each data item (transform(Any) -> Any)
@@ -50,7 +52,10 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
     #print("chunked_dataset_iterator: reading from", len(chunk_file_paths), "chunk files", file=sys.stderr)
     chunks  = InfinitePermutationIterator(chunk_file_paths, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
-    samples = ChunkedReadlinesIterator(chunks, credentials)
+    def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
+        #print("chunked_dataset_iterator: reading", textfile_path, file=sys.stderr)
+        return iter(read_utf8_file(textfile_path, credentials).splitlines())
+    samples = SelectManyIterator(source_iterator=chunks, collection_selector=readlines_from_zipped)
     # wrap the I/O operation in a prefetch iterator
     # BUGBUG: This currently fails the test suite (although it seems to work)
     #if prefetch_buffer_size:

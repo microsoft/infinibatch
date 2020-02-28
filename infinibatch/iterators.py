@@ -176,18 +176,18 @@ class SelectManyIterator(CheckpointableIterator):
     """
     Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
     """
-    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Callable[[Any], Iterable]):
+    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Callable[[Any], Iterator]):
         """
         Args:
             collection_selector: user callback that maps an item into an Iterable, whose items will be yielded.
-                                 The returned Iterable is used only once. Hence, it is also allowed to
+                                 The returned Iterator is used only once. Hence, it is also allowed to
                                  return self-iterables, such as iterators and generator expressions.
-            source_iterator: iterable of paths to chunk files
+            source_iterator: iterator over the items to pass to collection_selector()
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator          # type: CheckpointableIterator
-        self._collection_selector = collection_selector  # type: Callable[[Any], Iterable]
+        self._collection_selector = collection_selector  # type: Callable[[Any], Iterator]
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -217,23 +217,6 @@ class SelectManyIterator(CheckpointableIterator):
 
     def __next__(self):
         return next(self._iterator)
-
-
-# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator, credentials: Optional[Union[str,Dict[str,str]]] = None):
-    """
-    Reads text lines from zipped chunk files whose names are provided by an iterator.
-
-    Args:
-        chunk_file_paths: CheckpointableIterator of paths to chunk files
-        credentials: Azure credentials or None
-    """
-    if not isinstance(chunk_file_paths, CheckpointableIterator):
-        raise ValueError('chunk_file_paths has to be a CheckpointableIterator')
-    def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
-        #print("ChunkedReadlinesIterator: reading", textfile_path, file=sys.stderr)
-        return iter(read_utf8_file(textfile_path, credentials).splitlines())
-    return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=readlines_from_zipped)
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
