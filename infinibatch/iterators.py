@@ -34,8 +34,8 @@ Features:
 
 
 # TODO for next release:
-#  - implement new version of BufferedShuffleIterator that has smaller checkpoints
-#  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
+#  - benchmark the BlockShuffleIterator against the BufferedShuffleIterator
+#  - fix ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
 #  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
@@ -239,6 +239,66 @@ def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator, credentia
 class BufferedShuffleIterator(CheckpointableIterator):
     """
     Shuffles given iterable using a limited buffer.
+    """
+    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, seed: int = 0):
+        """
+        Args:
+            source_iterator: checkpointable iterator or restartable iterable over input items to shuffle
+            buffer_size: size of the buffer in number of items used for shuffling
+            seed: random seed used for shuffling (or None)
+        """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
+        self._source_iterator = source_iterator
+        self._buffer = [None for _ in range(buffer_size)]  # maybe do this lazily?   --Yes, since user may set state immediately, then this is not needed here
+        self._random = Random(seed)
+        self.setstate(None)
+
+    def getstate(self) -> Dict:
+        return {'source_state': self._source_iterator.getstate(),
+                'buffer':       copy.deepcopy(self._buffer),
+                'random_state': self._random.getstate()}
+
+    def setstate(self, checkpoint: Optional[Dict]):
+        if checkpoint:
+            self._source_iterator.setstate(checkpoint['source_state'])
+            self._buffer = checkpoint['buffer']
+            self._random.setstate(checkpoint['random_state'])
+            # @TODO: Can we add a comment how the flush part is handled?
+        else:
+            self._source_iterator.setstate(None)
+        self._iterator = self._generate()
+
+    def _generate(self) -> Iterator:
+        # shuffle data with a buffer:
+        # this is similar to what the Fisher-Yates shuffle does,
+        # but modified to run with a constant-size buffer
+        # see https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+        # this was inspired by an algorithm implemented in Kaldi
+        # see https://kaldi-asr.org/doc/nnet-shuffle-egs_8cc.html
+        for item in self._source_iterator:
+            index = self._random.randrange(0, len(self._buffer))
+            result = None
+            if self._buffer[index] is not None:
+                result = self._buffer[index]
+            self._buffer[index] = item
+            # only yield value once buffer is updated to allow for correct checkpointing!
+            if result is not None:
+                yield result
+
+        # flush buffer
+        while self._buffer:
+            item = self._buffer.pop()
+            if item is not None:
+                yield item
+
+    def __next__(self):
+        return next(self._iterator)
+
+
+class BlockShuffleIterator(CheckpointableIterator):
+    """
+    Shuffles given iterable by reading blocks of data and emitting them in random order.
     """
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, seed: int = 0):
         """

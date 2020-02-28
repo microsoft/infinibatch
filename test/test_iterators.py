@@ -8,7 +8,7 @@ from typing import Iterable, Iterator, Any, Union
 import unittest
 import pickle
 
-from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, \
+from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, BlockShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, WindowedIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
@@ -242,6 +242,18 @@ class TestBufferedShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
+class TestBlockShuffleIterator(TestBase):
+    def test_shuffle(self):
+        # work on copy of data in case data is modified by class
+        items = list(BlockShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
+        self.assertMultisetEqual(items, self.flattened_test_data)
+
+    def test_shuffle_buffer_size_one(self):
+        # work on copy of data in case data is modified by class
+        items = list(BlockShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
+        self.assertListEqual(items, self.flattened_test_data)
+
+
 class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         data = list(range(53))
@@ -333,17 +345,18 @@ class Testchunked_dataset_iterator(TestBase):
 
     def test_checkpointing(self):
         random = Random(1)
-        for i in range(5):
-            first_length = random.randrange(11,21)
-            extra_length = random.randrange(11,21)
-            dataset = chunked_dataset_iterator(self.data_dir, shuffle=(i % 2 == 0), seed=i, num_instances=2, instance_rank=0)
-            for _ in range(first_length):
-                next(dataset)
-            checkpoint = dataset.getstate()
-            items1 = list(itertools.islice(dataset, extra_length))
-            dataset.setstate(checkpoint)
-            items2 = list(itertools.islice(dataset, extra_length))
-            self.assertListEqual(items1, items2)
+        for use_block in True, False:
+            for i in range(5):
+                first_length = random.randrange(11,21)
+                extra_length = random.randrange(11,21)
+                dataset = chunked_dataset_iterator(self.data_dir, shuffle=(i % 2 == 0), seed=i, num_instances=2, instance_rank=0, use_block=use_block)
+                for _ in range(first_length):
+                    next(dataset)
+                checkpoint = dataset.getstate()
+                items1 = list(itertools.islice(dataset, extra_length))
+                dataset.setstate(checkpoint)
+                items2 = list(itertools.islice(dataset, extra_length))
+                self.assertListEqual(items1, items2)
 
 
 class TestBucketedReadaheadBatchIterator(TestBase):

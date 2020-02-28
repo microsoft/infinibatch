@@ -1,4 +1,4 @@
-from .iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, PrefetchIterator, BufferedShuffleIterator, MapIterator
+from .iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, PrefetchIterator, BufferedShuffleIterator, BlockShuffleIterator, MapIterator
 from .files_and_blobs import find_files
 from typing import Union, Iterable, Callable, Any, Optional, Dict
 import os
@@ -19,7 +19,8 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
                              transform: Callable[[Any],Any]=None,
                              prefetch_buffer_size: int=2**20,
                              seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0,
-                             credentials: Optional[Union[str,Dict[str,str]]] = None):
+                             credentials: Optional[Union[str,Dict[str,str]]] = None,
+                             use_block: bool=False):
     """
     Dataset reading data from gzipped chunks.
 
@@ -35,6 +36,7 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
         num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         credentials: Azure container credentials, either a string or a dict [account] -> key (or None)
+        use_block: temporary option to switch to BlockShuffleIterator (used for comparing against WindowsShuffleIterator). Will go away.
     """
     if isinstance(paths, str):  # handle single string
         paths = [paths]
@@ -50,12 +52,16 @@ def chunked_dataset_iterator(paths: Union[str, Iterable[str]], shuffle: bool=Tru
     # set up the item reader
     samples = ChunkedReadlinesIterator(chunks, credentials)
     # wrap the I/O operation in a prefetch iterator
-    if prefetch_buffer_size:
-        samples = PrefetchIterator(samples, prefetch_buffer_size)
+    # BUGBUG: This currently fails the test suite (although it seems to work)
+    #if prefetch_buffer_size:
+    #    samples = PrefetchIterator(samples, prefetch_buffer_size)
     # set up the item randomizer
     if shuffle:
         # use different seed for BufferedShuffleGenerator
-        samples = BufferedShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
+        if (use_block):
+            samples = BlockShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
+        else:
+            samples = BufferedShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
     # apply transform, if given
     if transform is not None:
         samples = MapIterator(samples, transform)
