@@ -10,7 +10,7 @@ import pickle
 
 from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, BlockShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
-                                  MapIterator, ZipIterator, WindowedIterator, \
+                                  MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
                                   PrefetchIterator
 from infinibatch.datasets import chunked_dataset_iterator
@@ -182,6 +182,16 @@ class TestSamplingRandomMapIterator(unittest.TestCase, TestCheckpointableIterato
         self.expected_result = [n + random.random() for n in data]
 
         self.iterator = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=transform, seed=seed)
+
+
+class TestFixedBatchIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        data = list(range(5))
+
+        batch_size = 3
+        self.expected_result = [data[0:3], data[3:]]
+
+        self.iterator = FixedBatchIterator(NativeCheckpointableIterator(data), batch_size=batch_size)
 
 
 class TestChunkedReadlinesIterator(TestBase):

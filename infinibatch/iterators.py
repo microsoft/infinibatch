@@ -473,6 +473,45 @@ class WindowedIterator(CheckpointableIterator):
         return next(self._iterator)
 
 
+# @TODO: research on whether this operation has a well-known name
+class FixedBatchIterator(CheckpointableIterator):
+    """
+    Batches N consecutive items into a single item that is a list of these items.
+
+    E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
+    [(1, 2, 3), (4, 5, 6), (7, 8)]
+    """
+    def __init__(self, source_iterator: CheckpointableIterator, batch_size: int):
+        """
+        Args:
+            source_iterator: checkpointable input iterators
+            batch_size: number of items per batch
+        """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
+        self._source_iterator = source_iterator  # type: CheckpointableIterator
+        self._batch_size = batch_size            # type: int
+        self.setstate(None)
+
+    def getstate(self) -> Dict:
+        return {'source_state': self._source_iterator.getstate()}  # state for first item in next batch
+
+    def setstate(self, checkpoint: Optional[Dict]):
+        self._source_state = checkpoint['source_state'] if checkpoint else None
+        self._source_iterator.setstate(self._source_state)
+        self._iterator = self._generate()
+
+    def _generate(self) -> Iterator:
+        while True:
+            batch = list(islice(self._source_iterator, self._batch_size))
+            if not batch:
+                break
+            yield batch
+
+    def __next__(self):
+        return next(self._iterator)
+
+
 class RandomIterator(CheckpointableIterator):
     """
     Iterator to generate uniformly distributed random numbers in the interval [0,1).
