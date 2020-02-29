@@ -11,7 +11,7 @@ import gc
 
 from infinibatch.iterators import InfinitePermutationIterator, BufferedShuffleIterator, BlockShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
-                                  MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, \
+                                  MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
                                   PrefetchIterator
 from infinibatch.datasets import chunked_dataset_iterator
@@ -201,50 +201,53 @@ class TestFixedBatchIterator(unittest.TestCase, TestCheckpointableIterator):
         self.iterator = FixedBatchIterator(NativeCheckpointableIterator(data), batch_size=batch_size)
 
 
-# class TestChunkedReadlinesIterator(TestBase):
-#     # Note: This test doubles as a test of SelectManyIterator, around which ChunkedReadlinesIterator()
-#     # is a shallow wrapper.
-#     def test(self):
-#         items = list(ChunkedReadlinesIterator(NativeCheckpointableIterator(self.chunk_file_paths)))
-#         self.assertListEqual(items, self.flattened_test_data)
+class TestSelectManyIterator(TestBase):
+    # in this test, SelectManyIterator is used to read chunk files
+    @staticmethod
+    def _select_many_chunks(chunk_file_paths):
+        return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=TestBase.read_chunk)
 
-#     def test_different_line_endings(self):
-#         # write data in binary mode with LF line endings
-#         lf_dir = tempfile.mkdtemp()
-#         lf_file = os.path.join(lf_dir, 'test.gz')
-#         with gzip.open(lf_file, 'w') as f:
-#             f.write('\n'.join(self.flattened_test_data).encode('utf-8'))
+    def test(self):
+        items = list(self._select_many_chunks(NativeCheckpointableIterator(self.chunk_file_paths)))
+        self.assertListEqual(items, self.flattened_test_data)
 
-#         # write data in binary mode with CRLF line endings
-#         crlf_dir = tempfile.mkdtemp()
-#         crlf_file = os.path.join(crlf_dir, 'test.gz')
-#         with gzip.open(crlf_file, 'w') as f:
-#             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
+    def test_different_line_endings(self):
+        # write data in binary mode with LF line endings
+        lf_dir = tempfile.mkdtemp()
+        lf_file = os.path.join(lf_dir, 'test.gz')
+        with gzip.open(lf_file, 'w') as f:
+            f.write('\n'.join(self.flattened_test_data).encode('utf-8'))
 
-#         lf_data = list(ChunkedReadlinesIterator(NativeCheckpointableIterator([lf_file])))
-#         crlf_dat = list(ChunkedReadlinesIterator(NativeCheckpointableIterator([crlf_file])))
-#         self.assertListEqual(lf_data, crlf_dat)
+        # write data in binary mode with CRLF line endings
+        crlf_dir = tempfile.mkdtemp()
+        crlf_file = os.path.join(crlf_dir, 'test.gz')
+        with gzip.open(crlf_file, 'w') as f:
+            f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-#         shutil.rmtree(lf_dir)
-#         shutil.rmtree(crlf_dir)
+        lf_data = list(self._select_many_chunks(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(self._select_many_chunks(NativeCheckpointableIterator([crlf_file])))
+        self.assertListEqual(lf_data, crlf_dat)
 
-#     def test_checkpointing(self):
-#         chunk_file_paths = (os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz'))
-#         chunk_file_paths = InfinitePermutationIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
-#         random = Random(1)
-#         for _ in range(5):
-#             first_length = random.randrange(11,31)
-#             extra_length = random.randrange(11,33)
-#             dataset = ChunkedReadlinesIterator(chunk_file_paths)
-#             for _ in range(first_length):
-#                 next(dataset)
-#             checkpoint = dataset.getstate()
-#             items0 = list(itertools.islice(dataset, extra_length))
-#             #print(len(items0))
-#             dataset.setstate(checkpoint)
-#             items1 = list(itertools.islice(dataset, extra_length))
-#             #print(len(items1))
-#             self.assertListEqual(items0, items1)
+        shutil.rmtree(lf_dir)
+        shutil.rmtree(crlf_dir)
+
+    def test_checkpointing(self):
+        chunk_file_paths = (os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz'))
+        chunk_file_paths = InfinitePermutationIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
+        random = Random(1)
+        for _ in range(5):
+            first_length = random.randrange(11,31)
+            extra_length = random.randrange(11,33)
+            dataset = self._select_many_chunks(chunk_file_paths)
+            for _ in range(first_length):
+                next(dataset)
+            checkpoint = dataset.getstate()
+            items0 = list(itertools.islice(dataset, extra_length))
+            #print(len(items0))
+            dataset.setstate(checkpoint)
+            items1 = list(itertools.islice(dataset, extra_length))
+            #print(len(items1))
+            self.assertListEqual(items0, items1)
 
 
 class TestBufferedShuffleIterator(TestBase):
