@@ -40,11 +40,8 @@ def _get_azure_key(storage_account: str, credentials: Optional[Union[str,Dict[st
 def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]) -> Iterator[str]:
     blob_data = _try_parse_azure_blob_uri(path)
     if blob_data is None:
-        if path.endswith('.gz'):
-            with gzip.open(path, 'rt', encoding='utf-8') as f:
-                return f.read()
-        else:
-            raise NotImplementedError  # @TODO
+        with open(path, "rb") as f:
+            data = f.read()
     else:
         try:
             # pip install azure-storage-blob
@@ -53,9 +50,10 @@ def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]) -
             print("Failed to import azure.storage.blob. Please pip install azure-storage-blob", file=sys.stderr)
             raise
         data = BlobClient.from_blob_url(path, credential=_get_azure_key(storage_account=blob_data[0], credentials=credentials)).download_blob().readall()
-        if path.endswith('.gz'):
-            data = gzip.decompress(data)
-        return data.decode(encoding='utf-8')
+    if path.endswith('.gz'):
+        data = gzip.decompress(data)
+    # @TODO: auto-detect UCS-2 by BOM
+    return data.decode(encoding='utf-8')
 
 
 def find_files(dir: str, ext: str, credentials: Optional[Union[str,Dict[str,str]]]):

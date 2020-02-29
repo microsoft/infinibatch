@@ -33,8 +33,7 @@ Features:
 
 
 # TODO for next release:
-#  - benchmark the BlockShuffleIterator against the BufferedShuffleIterator
-#  - fix ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
+#  - benchmark the accuracy when using BlockShuffleIterator vs. the BufferedShuffleIterator
 #  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
