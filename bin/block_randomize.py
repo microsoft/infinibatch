@@ -32,6 +32,6 @@ chunk_file_paths = [  # enumerate all .gz files in the given paths
 chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
 #print("chunked_dataset_iterator: reading from", len(chunk_file_paths), "chunk files", file=sys.stderr)
 
-ds = chunked_dataset_iterator(chunk_file_paths, read_chunk_fn=readlines_from_zipped, shuffle=True, buffer_size=1000000, seed=1, credentials=credential)
+ds = chunked_dataset_iterator(chunk_file_paths, read_chunk_fn=readlines_from_zipped, shuffle=True, buffer_size=1000000, seed=1)
 for line in ds:
     print(line)

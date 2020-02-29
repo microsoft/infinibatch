@@ -20,7 +20,6 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
                              transform: Callable[[Any],Any]=None,
                              prefetch_buffer_size: int=2**20,
                              seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0,
-                             credentials: Optional[Union[str,Dict[str,str]]] = None,
                              use_block: bool=False):
     """
     Dataset reading data from gzipped chunks.
@@ -29,7 +28,7 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
 
     Args:
         chunk_refs: references (such as path names) to chunk files
-        read_chunk_fn: function(chunk_ref) to read a chunk's content into an iterator over its items
+        read_chunk_fn: function(chunk_ref) -> Iterator to read a chunk's content into an iterator over its items, e.g. read a file and split into text lines
         shuffle: if true, the data is shuffled
         buffer_size: size of the buffer in number of samples / data items used for shuffling (default: 2**20)
         transform: transform to be applied to each data item (transform(Any) -> Any)
@@ -37,13 +36,12 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
         seed: random seed (or None)
         num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-        credentials: Azure container credentials, either a string or a dict [account] -> key (or None)
         use_block: temporary option to switch to BlockShuffleIterator (used for comparing against WindowsShuffleIterator). Will go away.
     """
     # set up the chunk reader
-    chunks  = InfinitePermutationIterator(chunk_refs, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+    randomized_chunk_refs  = InfinitePermutationIterator(chunk_refs, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
-    samples = SelectManyIterator(source_iterator=chunks, collection_selector=read_chunk_fn)
+    samples = SelectManyIterator(source_iterator=randomized_chunk_refs, collection_selector=read_chunk_fn)
     # wrap the I/O operation in a prefetch iterator
     # BUGBUG: This currently fails the test suite (although it seems to work)
     #if prefetch_buffer_size:
