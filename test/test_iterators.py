@@ -98,7 +98,7 @@ class TestBase(unittest.TestCase):
             return iter(f.read().splitlines())
 
     def tearDown(self):
-        gc.collect()
+        gc.collect()  # this will get the pre-fetch terminated in some tests, which otherwise may still want to read these files
         shutil.rmtree(self.data_dir)
     
     def assertMultisetEqual(self, a, b):
@@ -204,11 +204,11 @@ class TestFixedBatchIterator(unittest.TestCase, TestCheckpointableIterator):
 class TestSelectManyIterator(TestBase):
     # in this test, SelectManyIterator is used to read chunk files
     @staticmethod
-    def _select_many_chunks(chunk_file_paths):
+    def _select_many_from_chunks(chunk_file_paths):
         return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=TestBase.read_chunk)
 
     def test(self):
-        items = list(self._select_many_chunks(NativeCheckpointableIterator(self.chunk_file_paths)))
+        items = list(self._select_many_from_chunks(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -224,8 +224,8 @@ class TestSelectManyIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(self._select_many_chunks(NativeCheckpointableIterator([lf_file])))
-        crlf_dat = list(self._select_many_chunks(NativeCheckpointableIterator([crlf_file])))
+        lf_data = list(self._select_many_from_chunks(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(self._select_many_from_chunks(NativeCheckpointableIterator([crlf_file])))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -238,7 +238,7 @@ class TestSelectManyIterator(TestBase):
         for _ in range(5):
             first_length = random.randrange(11,31)
             extra_length = random.randrange(11,33)
-            dataset = self._select_many_chunks(chunk_file_paths)
+            dataset = self._select_many_from_chunks(chunk_file_paths)
             for _ in range(first_length):
                 next(dataset)
             checkpoint = dataset.getstate()
@@ -262,6 +262,7 @@ class TestBufferedShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
+# note: this is also tested in more depth in Test_chunked_dataset_iterator()
 class TestBlockShuffleIterator(TestBase):
     def test_shuffle(self):
         # work on copy of data in case data is modified by class
@@ -319,19 +320,6 @@ class TestRandomIterator(TestBase):
         self.assertListEqual(items1a, items1b)
 
 
-#class TestSamplingMapIterator(TestBase):   @TODO: is this still needed?
-#    def test(self):
-#        n = 100
-#        seq = list(range(n))
-#        it = SamplingMapIterator(NativeCheckpointableIterator(seq), sampling_transform=lambda rand_val, item: item + rand_val, seed=1)
-#        _ = list(itertools.islice(it, n * 3 // 10))
-#        checkpoint = it.getstate()
-#        items1a = list(itertools.islice(it, n * 7 // 10))
-#        it.setstate(checkpoint)
-#        items1b = list(itertools.islice(it, n * 7 // 10))
-#        self.assertListEqual(items1a, items1b)
-
-
 class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         self.expected_result = list(range(53))
@@ -339,7 +327,7 @@ class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
         self.iterator = PrefetchIterator(source_iterator, buffer_size=13)
 
 
-class Testchunked_dataset_iterator(TestBase):
+class Test_chunked_dataset_iterator(TestBase):
     def test_no_shuffle(self):
         items = list(itertools.islice(chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000), len(self.flattened_test_data)))
         self.assertListEqual(items, self.flattened_test_data)

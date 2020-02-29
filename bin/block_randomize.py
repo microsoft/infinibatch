@@ -53,10 +53,10 @@ def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]) -
     if path.endswith('.gz'):
         data = gzip.decompress(data)
     # @TODO: auto-detect UCS-2 by BOM
-    return data.decode(encoding='utf-8')
+    return iter(data.decode(encoding='utf-8').splitlines())
 
 
-def find_files(dir: str, ext: str, credentials: Optional[Union[str,Dict[str,str]]]):
+def enumerate_files(dir: str, ext: str, credentials: Optional[Union[str,Dict[str,str]]]):
     blob_data = _try_parse_azure_blob_uri(dir)
     if blob_data is None:
         return [os.path.join(dir, path.name)
@@ -71,14 +71,14 @@ def find_files(dir: str, ext: str, credentials: Optional[Union[str,Dict[str,str]
             raise
         account, container, blob_path = blob_data
 
-        print("find_files: enumerating blobs in", dir, file=sys.stderr, flush=True)
+        print("enumerate_files: enumerating blobs in", dir, file=sys.stderr, flush=True)
         # @BUGBUG: The prefix does not seem to have to start; seems it can also be a substring
         container_uri = "https://" + account + ".blob.core.windows.net/" + container
         container_client = ContainerClient.from_container_url(container_uri, credential=_get_azure_key(account, credentials))
         if not blob_path.endswith("/"):
             blob_path += "/"
         blob_uris = [container_uri + "/" + blob["name"] for blob in container_client.walk_blobs(blob_path, delimiter="") if (ext is None or blob["name"].endswith(ext))]
-        print("find_files:", len(blob_uris), "blobs found", file=sys.stderr, flush=True)
+        print("enumerate_files:", len(blob_uris), "blobs found", file=sys.stderr, flush=True)
         for blob_name in blob_uris[:10]:
             print(blob_name, file=sys.stderr, flush=True)
         return blob_uris
@@ -91,18 +91,15 @@ else:
     credential = None
     paths = sys.argv[1:]
 
-def readlines_from_zipped(textfile_path: str):
-    #print("chunked_dataset_iterator: reading", textfile_path, file=sys.stderr)
-    return iter(read_utf8_file(textfile_path, credential).splitlines())
-
 chunk_file_paths = [  # enumerate all .gz files in the given paths
     subpath
     for path in paths
-    for subpath in find_files(path, '.gz', credential)
+    for subpath in enumerate_files(path, '.gz', credential)
 ]
 chunk_file_paths.sort()  # make sure file order is always the same, independent of OS
 print("block_randomize: reading from", len(chunk_file_paths), "chunk files", file=sys.stderr)
 
-ds = chunked_dataset_iterator(chunk_refs=chunk_file_paths, read_chunk_fn=readlines_from_zipped, shuffle=True, buffer_size=1000000, seed=1)
+ds = chunked_dataset_iterator(chunk_refs=chunk_file_paths, read_chunk_fn=lambda path: read_utf8_file(path, credential),
+                              shuffle=True, buffer_size=1000000, seed=1)
 for line in ds:
     print(line)
