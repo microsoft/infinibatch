@@ -33,8 +33,7 @@ Features:
 
 
 # TODO for next release:
-#  - implement new version of BufferedShuffleIterator that has smaller checkpoints
-#  - modify ChunkedReadlinesIterator to also work on uncompressed data, or even more general data formats
+#  - benchmark the accuracy when using BlockwiseShuffleIterator vs. the BufferedShuffleIterator
 #  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
@@ -116,13 +115,15 @@ class InfinitePermutationIterator(CheckpointableIterator):
     def __init__(self, source_iterator: Iterator, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
         Args:
-            source_iterator: input iterator
+            source_iterator: input iterator (must not be infinite, and small enough to fit into RAM entirely)
             seed: random seed used for shuffling (or None)
             shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
             num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         """
         self._source_items = list(source_iterator)  # keep a local copy
+        if not self._source_items:
+            raise ValueError("InfinitePermutationIterator: source_iterator must not be empty")
         self._shuffle = shuffle
         self._seed = seed
         self._num_instances = num_instances
@@ -173,18 +174,18 @@ class SelectManyIterator(CheckpointableIterator):
     """
     Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
     """
-    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Callable[[Any], Iterable]):
+    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Callable[[Any], Iterator]):
         """
         Args:
             collection_selector: user callback that maps an item into an Iterable, whose items will be yielded.
-                                 The returned Iterable is used only once. Hence, it is also allowed to
+                                 The returned Iterator is used only once. Hence, it is also allowed to
                                  return self-iterables, such as iterators and generator expressions.
-            source_iterator: iterable of paths to chunk files
+            source_iterator: iterator over the items to pass to collection_selector()
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator          # type: CheckpointableIterator
-        self._collection_selector = collection_selector  # type: Callable[[Any], Iterable]
+        self._collection_selector = collection_selector  # type: Callable[[Any], Iterator]
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -214,23 +215,6 @@ class SelectManyIterator(CheckpointableIterator):
 
     def __next__(self):
         return next(self._iterator)
-
-
-# @TODO: Can we seamlessly support UCS-2 files as well? C# can auto-detect. Does Python have such a facility?
-def ChunkedReadlinesIterator(chunk_file_paths: CheckpointableIterator):
-    """
-    Reads text lines from zipped chunk files whose names are provided by an iterator.
-
-    Args:
-        chunk_file_paths: CheckpointableIterator of paths to chunk files
-    """
-    if not isinstance(chunk_file_paths, CheckpointableIterator):
-        raise ValueError('chunk_file_paths has to be a CheckpointableIterator')
-    def readlines_from_zipped(textfile_path: str) -> Iterable[str]:
-        #print("ChunkedReadlinesIterator: reading", textfile_path, file=sys.stderr)
-        with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
-            return iter(f.read().splitlines())
-    return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=readlines_from_zipped)
 
 
 class BufferedShuffleIterator(CheckpointableIterator):
@@ -359,8 +343,8 @@ class WindowedIterator(CheckpointableIterator):
     """
     Yields 'width' consecutive items in a sliding window.
 
-    E.g. [1, 2, 3 4, 5, 6] with width = 3 will yield
-    [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
+    E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
+    [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]
     """
     def __init__(self, source_iterator: CheckpointableIterator, width: int):
         """
@@ -410,6 +394,45 @@ class WindowedIterator(CheckpointableIterator):
         return next(self._iterator)
 
 
+# @TODO: research on whether this operation has a well-known name
+class FixedBatchIterator(CheckpointableIterator):
+    """
+    Batches N consecutive items into a single item that is a list of these items.
+
+    E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
+    [(1, 2, 3), (4, 5, 6), (7, 8)]
+    """
+    def __init__(self, source_iterator: CheckpointableIterator, batch_size: int):
+        """
+        Args:
+            source_iterator: checkpointable input iterators
+            batch_size: number of items per batch
+        """
+        if not isinstance(source_iterator, CheckpointableIterator):
+            raise ValueError('source_iterator has to be a CheckpointableIterator')
+        self._source_iterator = source_iterator  # type: CheckpointableIterator
+        self._batch_size = batch_size            # type: int
+        self.setstate(None)
+
+    def getstate(self) -> Dict:
+        return {'source_state': self._source_iterator.getstate()}  # state for first item in next batch
+
+    def setstate(self, checkpoint: Optional[Dict]):
+        self._source_state = checkpoint['source_state'] if checkpoint else None
+        self._source_iterator.setstate(self._source_state)
+        self._iterator = self._generate()
+
+    def _generate(self) -> Iterator:
+        while True:
+            batch = list(islice(self._source_iterator, self._batch_size))
+            if not batch:
+                break
+            yield batch
+
+    def __next__(self):
+        return next(self._iterator)
+
+
 class RandomIterator(CheckpointableIterator):
     """
     Iterator to generate uniformly distributed random numbers in the interval [0,1).
@@ -433,25 +456,6 @@ class RandomIterator(CheckpointableIterator):
 
     def __next__(self):
         return self._random.random()
-
-
-# It is not clear whether there is much value in this one. Let's leave it commented-out
-# for a while, then decide whether to delete or uncomment it?
-#def SamplingMapIterator(input_iterator: CheckpointableIterator, sampling_transform: Callable[[float,Any],Any], seed: Optional[int]=None):
-#    """
-#    Iterates over a checkpointable iterator and invokes a user-supplied transform function
-#    as sampling_transform(rand_val, item), where rand_val is a random number in [0,1).
-#
-#    Args:
-#        sampling_transform: a callable with signature (rand_val, item)
-#        seed: Random seed.
-#    """
-#    r = RandomIterator(seed)
-#    i = ZipIterator(r, input_iterator)  # generates tuples (random number, input item)
-#    def _wrapped_transform(arg: Tuple[float, Any]) -> Any:  # invokes user's transform function with the tuple members as the arguments
-#        randval, item = arg
-#        return sampling_transform(randval, item)
-#    return MapIterator(i, _wrapped_transform)
 
 
 class RecurrentIterator(CheckpointableIterator):
@@ -508,6 +512,31 @@ def SamplingRandomMapIterator(source_iterator: CheckpointableIterator, transform
         output = transform(_random, item)
         return _random.getstate(), output
     return RecurrentIterator(source_iterator, _step_function, initial_state=_random.getstate())
+
+
+def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size: int, seed: int = 0):
+    """
+    Shuffles a sequence of items by grouping consecutive items in blocks of fixed size, shuffling
+    each block, and yielding the shuffled items of all blocks as a flat sequence.
+
+    E.g. [1, 2, 3, 4, 5, 6, 7, 8] with block_size = 3 may yield [3, 1, 2, 4, 6, 5, 8, 7].
+
+    Args:
+        source_iterator: checkpointable iterator or restartable iterable over input items to shuffle
+        block_size: size of the buffer in number of items used for shuffling
+        seed: random seed used for shuffling (or None)
+    """
+    # This is implemented as a pipeline:
+    #  - group N consecutive items together
+    #  - shuffle them
+    #  - flatten the result
+    blocks = FixedBatchIterator(source_iterator, batch_size=block_size)
+    def shuffle_block_fn(random: Random, block: List):
+        random.shuffle(block)
+        return block
+    shuffled_blocks = SamplingRandomMapIterator(blocks, transform=shuffle_block_fn, seed=seed)
+    samples = SelectManyIterator(shuffled_blocks, collection_selector=lambda shuffled_block: iter(shuffled_block))
+    return samples
 
 
 class PrefetchIterator(CheckpointableIterator):
@@ -587,6 +616,14 @@ class PrefetchIterator(CheckpointableIterator):
             assert self._item_offset < self._buffer_size
         return item  # for debugging, its useful to return msg instead of item
 
+    def __del__(self):  # note: this is often not called. If you really need it, gc.collect() will do the trick.
+        if self._thread is not None:
+            assert self._queue is not None
+            self._queue.close()
+            try:
+                self._thread.join()
+            except:
+                pass
 
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """

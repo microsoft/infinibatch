@@ -7,10 +7,11 @@ import tempfile
 from typing import Iterable, Iterator, Any, Union
 import unittest
 import pickle
+import gc
 
-from infinibatch.iterators import InfinitePermutationIterator, ChunkedReadlinesIterator, BufferedShuffleIterator, \
+from infinibatch.iterators import InfinitePermutationIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
-                                  MapIterator, ZipIterator, WindowedIterator, \
+                                  MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
                                   PrefetchIterator
 from infinibatch.datasets import chunked_dataset_iterator
@@ -91,7 +92,13 @@ class TestBase(unittest.TestCase):
             with gzip.open(file_name, 'wt', encoding='utf-8') as f:
                 f.write(file_content)
 
+    @staticmethod
+    def read_chunk(textfile_path: str) -> Iterator[str]:   # read_chunk_fn for chunked_dataset_iterator
+        with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
+            return iter(f.read().splitlines())
+
     def tearDown(self):
+        gc.collect()  # this will get the pre-fetch terminated in some tests, which otherwise may still want to read these files
         shutil.rmtree(self.data_dir)
     
     def assertMultisetEqual(self, a, b):
@@ -184,11 +191,24 @@ class TestSamplingRandomMapIterator(unittest.TestCase, TestCheckpointableIterato
         self.iterator = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=transform, seed=seed)
 
 
-class TestChunkedReadlinesIterator(TestBase):
-    # Note: This test doubles as a test of SelectManyIterator, around which ChunkedReadlinesIterator()
-    # is a shallow wrapper.
+class TestFixedBatchIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        data = list(range(5))
+
+        batch_size = 3
+        self.expected_result = [data[0:3], data[3:]]
+
+        self.iterator = FixedBatchIterator(NativeCheckpointableIterator(data), batch_size=batch_size)
+
+
+class TestSelectManyIterator(TestBase):
+    # in this test, SelectManyIterator is used to read chunk files
+    @staticmethod
+    def _select_many_from_chunks(chunk_file_paths):
+        return SelectManyIterator(source_iterator=chunk_file_paths, collection_selector=TestBase.read_chunk)
+
     def test(self):
-        items = list(ChunkedReadlinesIterator(NativeCheckpointableIterator(self.chunk_file_paths)))
+        items = list(self._select_many_from_chunks(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_different_line_endings(self):
@@ -204,8 +224,8 @@ class TestChunkedReadlinesIterator(TestBase):
         with gzip.open(crlf_file, 'w') as f:
             f.write('\r\n'.join(self.flattened_test_data).encode('utf-8'))
 
-        lf_data = list(ChunkedReadlinesIterator(NativeCheckpointableIterator([lf_file])))
-        crlf_dat = list(ChunkedReadlinesIterator(NativeCheckpointableIterator([crlf_file])))
+        lf_data = list(self._select_many_from_chunks(NativeCheckpointableIterator([lf_file])))
+        crlf_dat = list(self._select_many_from_chunks(NativeCheckpointableIterator([crlf_file])))
         self.assertListEqual(lf_data, crlf_dat)
 
         shutil.rmtree(lf_dir)
@@ -218,7 +238,7 @@ class TestChunkedReadlinesIterator(TestBase):
         for _ in range(5):
             first_length = random.randrange(11,31)
             extra_length = random.randrange(11,33)
-            dataset = ChunkedReadlinesIterator(chunk_file_paths)
+            dataset = self._select_many_from_chunks(chunk_file_paths)
             for _ in range(first_length):
                 next(dataset)
             checkpoint = dataset.getstate()
@@ -239,6 +259,19 @@ class TestBufferedShuffleIterator(TestBase):
     def test_shuffle_buffer_size_one(self):
         # work on copy of data in case data is modified by class
         items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
+        self.assertListEqual(items, self.flattened_test_data)
+
+
+# note: this is also tested in more depth in Test_chunked_dataset_iterator()
+class TestBlockwiseShuffleIterator(TestBase):
+    def test_shuffle(self):
+        # work on copy of data in case data is modified by class
+        items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
+        self.assertMultisetEqual(items, self.flattened_test_data)
+
+    def test_shuffle_buffer_size_one(self):
+        # work on copy of data in case data is modified by class
+        items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
 
 
@@ -287,19 +320,6 @@ class TestRandomIterator(TestBase):
         self.assertListEqual(items1a, items1b)
 
 
-#class TestSamplingMapIterator(TestBase):
-#    def test(self):
-#        n = 100
-#        seq = list(range(n))
-#        it = SamplingMapIterator(NativeCheckpointableIterator(seq), sampling_transform=lambda rand_val, item: item + rand_val, seed=1)
-#        _ = list(itertools.islice(it, n * 3 // 10))
-#        checkpoint = it.getstate()
-#        items1a = list(itertools.islice(it, n * 7 // 10))
-#        it.setstate(checkpoint)
-#        items1b = list(itertools.islice(it, n * 7 // 10))
-#        self.assertListEqual(items1a, items1b)
-
-
 class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         self.expected_result = list(range(53))
@@ -307,43 +327,44 @@ class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
         self.iterator = PrefetchIterator(source_iterator, buffer_size=13)
 
 
-class Testchunked_dataset_iterator(TestBase):
+class Test_chunked_dataset_iterator(TestBase):
     def test_no_shuffle(self):
-        items = list(itertools.islice(chunked_dataset_iterator(self.data_dir, shuffle=False), len(self.flattened_test_data)))
+        items = list(itertools.islice(chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000), len(self.flattened_test_data)))
         self.assertListEqual(items, self.flattened_test_data)
     
     def test_other_files_present(self):
         with open(os.path.join(self.data_dir, 'i_do_not_belong_here.txt'), 'w') as f:
             f.write('really ...')
-        items = list(itertools.islice(chunked_dataset_iterator(self.data_dir, shuffle=False), len(self.flattened_test_data)))
+        items = list(itertools.islice(chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000), len(self.flattened_test_data)))
         self.assertListEqual(items, self.flattened_test_data)
 
     def test_transform(self):
         transform = lambda s: s + '!'
         modified_test_data = [transform(s) for s in self.flattened_test_data]
-        items = list(itertools.islice(chunked_dataset_iterator(self.data_dir, shuffle=False, transform=transform), len(self.flattened_test_data)))
+        items = list(itertools.islice(chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000, transform=transform), len(self.flattened_test_data)))
         self.assertListEqual(items, modified_test_data)
 
     def test_two_instances(self):
-        dataset0 = chunked_dataset_iterator(self.data_dir, shuffle=False, num_instances=2, instance_rank=0)
-        dataset1 = chunked_dataset_iterator(self.data_dir, shuffle=False, num_instances=2, instance_rank=1)
+        dataset0 = chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000, num_instances=2, instance_rank=0)
+        dataset1 = chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000, num_instances=2, instance_rank=1)
         items0 = list(itertools.islice(dataset0, len(self.test_data[0]) + len(self.test_data[2])))
         items1 = list(itertools.islice(dataset1, len(self.test_data[1]) + len(self.test_data[3])))
         self.assertMultisetEqual(set(items0 + items1), self.flattened_test_data)
 
     def test_checkpointing(self):
         random = Random(1)
-        for i in range(5):
-            first_length = random.randrange(11,21)
-            extra_length = random.randrange(11,21)
-            dataset = chunked_dataset_iterator(self.data_dir, shuffle=(i % 2 == 0), seed=i, num_instances=2, instance_rank=0)
-            for _ in range(first_length):
-                next(dataset)
-            checkpoint = dataset.getstate()
-            items1 = list(itertools.islice(dataset, extra_length))
-            dataset.setstate(checkpoint)
-            items2 = list(itertools.islice(dataset, extra_length))
-            self.assertListEqual(items1, items2)
+        for use_windowed in (True, False):
+            for i in range(2):
+                first_length = random.randrange(11,21)
+                extra_length = random.randrange(11,21)
+                dataset = chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=(i % 2 == 0), buffer_size=1000, seed=i, num_instances=2, instance_rank=0, use_windowed=use_windowed)
+                for _ in range(first_length):
+                    next(dataset)
+                checkpoint = dataset.getstate()
+                items1 = list(itertools.islice(dataset, extra_length))
+                dataset.setstate(checkpoint)
+                items2 = list(itertools.islice(dataset, extra_length))
+                self.assertListEqual(items1, items2)
 
 
 class TestBucketedReadaheadBatchIterator(TestBase):
@@ -352,14 +373,14 @@ class TestBucketedReadaheadBatchIterator(TestBase):
         batch_labels = 75  # note: these settings imply a few iterations through the chunks
         # basic operation, should not crash
         bg = BucketedReadaheadBatchIterator(
-            chunked_dataset_iterator(self.data_dir, shuffle=True, seed=1),
+            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, buffer_size=1000, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))
         batches1 = list(itertools.islice(bg, num_batches))
         # verify determinism
         bg = BucketedReadaheadBatchIterator(
-            chunked_dataset_iterator(self.data_dir, shuffle=True, seed=1),
+            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, buffer_size=1000, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))
@@ -372,7 +393,7 @@ class TestBucketedReadaheadBatchIterator(TestBase):
         extra_batches = 7
         batch_labels = 123
         bg = BucketedReadaheadBatchIterator(
-            chunked_dataset_iterator(self.data_dir, shuffle=True, seed=1),
+            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, buffer_size=1000, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))
