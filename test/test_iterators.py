@@ -7,6 +7,7 @@ import tempfile
 from typing import Iterable, Iterator, Any, Union
 import unittest
 import pickle
+import gc
 
 from infinibatch.iterators import InfinitePermutationIterator, BufferedShuffleIterator, BlockShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
@@ -97,6 +98,7 @@ class TestBase(unittest.TestCase):
             return iter(f.read().splitlines())
 
     def tearDown(self):
+        gc.collect()
         shutil.rmtree(self.data_dir)
     
     def assertMultisetEqual(self, a, b):

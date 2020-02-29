@@ -614,6 +614,14 @@ class PrefetchIterator(CheckpointableIterator):
             assert self._item_offset < self._buffer_size
         return item  # for debugging, its useful to return msg instead of item
 
+    def __del__(self):  # note: this is often not called. If you really need it, gc.collect() will do the trick.
+        if self._thread is not None:
+            assert self._queue is not None
+            self._queue.close()
+            try:
+                self._thread.join()
+            except:
+                pass
 
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """

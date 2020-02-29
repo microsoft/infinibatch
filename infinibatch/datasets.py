@@ -43,8 +43,8 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
     samples = SelectManyIterator(source_iterator=randomized_chunk_refs, collection_selector=read_chunk_fn)
     # wrap the I/O operation in a prefetch iterator
     # BUGBUG: This currently fails the test suite (although it seems to work)
-    #if prefetch_buffer_size:
-    #    samples = PrefetchIterator(samples, prefetch_buffer_size)
+    if prefetch_buffer_size:
+        samples = PrefetchIterator(samples, prefetch_buffer_size)
     # set up the item randomizer
     if shuffle:
         # use different seed for BufferedShuffleGenerator
