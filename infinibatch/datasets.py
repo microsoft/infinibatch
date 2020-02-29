@@ -46,7 +46,7 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
         samples = PrefetchIterator(samples, buffer_size)
     # set up the item randomizer
     if shuffle:
-        if (use_windowed):
+        if use_windowed:
             samples = BufferedShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
         else:
             samples = BlockwiseShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
