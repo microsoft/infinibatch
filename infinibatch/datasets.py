@@ -1,4 +1,4 @@
-from .iterators import InfinitePermutationIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockShuffleIterator, MapIterator
+from .iterators import InfinitePermutationIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
 from typing import Union, Iterable, Iterator, Callable, Any, Optional, Dict
 import os, sys
 
@@ -49,7 +49,7 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
         if (use_windowed):
             samples = BufferedShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
         else:
-            samples = BlockShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
+            samples = BlockwiseShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
     # apply transform, if given
     if transform is not None:
         samples = MapIterator(samples, transform)

@@ -33,7 +33,7 @@ Features:
 
 
 # TODO for next release:
-#  - benchmark the accuracy when using BlockShuffleIterator vs. the BufferedShuffleIterator
+#  - benchmark the accuracy when using BlockwiseShuffleIterator vs. the BufferedShuffleIterator
 #  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
@@ -343,7 +343,7 @@ class WindowedIterator(CheckpointableIterator):
     """
     Yields 'width' consecutive items in a sliding window.
 
-    E.g. [1, 2, 3 4, 5, 6] with width = 3 will yield
+    E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
     [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]
     """
     def __init__(self, source_iterator: CheckpointableIterator, width: int):
@@ -514,9 +514,12 @@ def SamplingRandomMapIterator(source_iterator: CheckpointableIterator, transform
     return RecurrentIterator(source_iterator, _step_function, initial_state=_random.getstate())
 
 
-def BlockShuffleIterator(source_iterator: CheckpointableIterator, block_size: int, seed: int = 0):
+def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size: int, seed: int = 0):
     """
-    Shuffles given iterable by reading blocks of data and emitting them in random order.
+    Shuffles a sequence of items by grouping consecutive items in blocks of fixed size, shuffling
+    each block, and yielding the shuffled items of all blocks as a flat sequence.
+
+    E.g. [1, 2, 3, 4, 5, 6, 7, 8] with block_size = 3 may yield [3, 1, 2, 3, 5, 4, 8, 7].
 
     Args:
         source_iterator: checkpointable iterator or restartable iterable over input items to shuffle

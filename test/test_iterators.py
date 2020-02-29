@@ -9,7 +9,7 @@ import unittest
 import pickle
 import gc
 
-from infinibatch.iterators import InfinitePermutationIterator, BufferedShuffleIterator, BlockShuffleIterator, \
+from infinibatch.iterators import InfinitePermutationIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
@@ -263,15 +263,15 @@ class TestBufferedShuffleIterator(TestBase):
 
 
 # note: this is also tested in more depth in Test_chunked_dataset_iterator()
-class TestBlockShuffleIterator(TestBase):
+class TestBlockwiseShuffleIterator(TestBase):
     def test_shuffle(self):
         # work on copy of data in case data is modified by class
-        items = list(BlockShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
+        items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
         self.assertMultisetEqual(items, self.flattened_test_data)
 
     def test_shuffle_buffer_size_one(self):
         # work on copy of data in case data is modified by class
-        items = list(BlockShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
+        items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
 
 
