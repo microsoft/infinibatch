@@ -519,7 +519,7 @@ def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size
     Shuffles a sequence of items by grouping consecutive items in blocks of fixed size, shuffling
     each block, and yielding the shuffled items of all blocks as a flat sequence.
 
-    E.g. [1, 2, 3, 4, 5, 6, 7, 8] with block_size = 3 may yield [3, 1, 2, 3, 5, 4, 8, 7].
+    E.g. [1, 2, 3, 4, 5, 6, 7, 8] with block_size = 3 may yield [3, 1, 2, 4, 6, 5, 8, 7].
 
     Args:
         source_iterator: checkpointable iterator or restartable iterable over input items to shuffle
