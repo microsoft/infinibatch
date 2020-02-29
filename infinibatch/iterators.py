@@ -8,7 +8,6 @@ from queue import Full, Queue
 from random import Random
 from threading import Thread
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
-from .files_and_blobs import read_utf8_file
 
 
 from .closablequeue import ClosableQueue, ClosedException

@@ -1,5 +1,4 @@
 from .iterators import InfinitePermutationIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockShuffleIterator, MapIterator
-from .files_and_blobs import find_files, read_utf8_file
 from typing import Union, Iterable, Iterator, Callable, Any, Optional, Dict
 import os, sys
 

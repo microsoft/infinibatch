@@ -92,8 +92,7 @@ class TestBase(unittest.TestCase):
                 f.write(file_content)
 
     @staticmethod
-    def read_chunk(textfile_path: str) -> Iterator[str]:
-        #print("chunked_dataset_iterator: reading", textfile_path, file=sys.stderr)
+    def read_chunk(textfile_path: str) -> Iterator[str]:   # read_chunk_fn for chunked_dataset_iterator
         with gzip.open(textfile_path, 'rt', encoding='utf-8') as f:
             return iter(f.read().splitlines())
 
