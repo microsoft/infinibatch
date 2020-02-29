@@ -353,11 +353,11 @@ class Test_chunked_dataset_iterator(TestBase):
 
     def test_checkpointing(self):
         random = Random(1)
-        for use_block in (True, False):
+        for use_windowed in (True, False):
             for i in range(2):
                 first_length = random.randrange(11,21)
                 extra_length = random.randrange(11,21)
-                dataset = chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=(i % 2 == 0), buffer_size=1000, seed=i, num_instances=2, instance_rank=0, use_block=use_block)
+                dataset = chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=(i % 2 == 0), buffer_size=1000, seed=i, num_instances=2, instance_rank=0, use_windowed=use_windowed)
                 for _ in range(first_length):
                     next(dataset)
                 checkpoint = dataset.getstate()
@@ -373,14 +373,14 @@ class TestBucketedReadaheadBatchIterator(TestBase):
         batch_labels = 75  # note: these settings imply a few iterations through the chunks
         # basic operation, should not crash
         bg = BucketedReadaheadBatchIterator(
-            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, seed=1),
+            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, buffer_size=1000, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))
         batches1 = list(itertools.islice(bg, num_batches))
         # verify determinism
         bg = BucketedReadaheadBatchIterator(
-            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, seed=1),
+            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, buffer_size=1000, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))
@@ -393,7 +393,7 @@ class TestBucketedReadaheadBatchIterator(TestBase):
         extra_batches = 7
         batch_labels = 123
         bg = BucketedReadaheadBatchIterator(
-            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, seed=1),
+            chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=True, buffer_size=1000, seed=1),
             read_ahead=100, seed=1,
             key=lambda line: len(line),
             batch_size=lambda line: batch_labels // (1+len(line)))

@@ -17,9 +17,9 @@ def bump_seed(seed: Optional[int], step = 1):
 def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any], Iterator],
                              shuffle: bool=True, buffer_size: int=2**20,
                              transform: Callable[[Any],Any]=None,
-                             prefetch_buffer_size: int=2**20,
+                             prefetch: bool = True,
                              seed: Optional[int]=None, num_instances: int=1, instance_rank: int=0,
-                             use_block: bool=False):
+                             use_windowed: bool=False):
     """
     Dataset reading data from gzipped chunks.
 
@@ -31,27 +31,25 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
         shuffle: if true, the data is shuffled
         buffer_size: size of the buffer in number of samples / data items used for shuffling (default: 2**20)
         transform: transform to be applied to each data item (transform(Any) -> Any)
-        prefetch_buffer_size: if not None, insert a prefetch iterator with this buffer size (default: 2**20)
+        prefetch: if True, insert a prefetch iterator with buffer_size
         seed: random seed (or None)
         num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-        use_block: temporary option to switch to BlockShuffleIterator (used for comparing against WindowsShuffleIterator). Will go away.
+        use_windowed: temporary option to switch back to the WindowedShuffleIterator (default False). Will go away once shown that we don't need it anymore.
     """
     # set up the chunk reader
     randomized_chunk_refs  = InfinitePermutationIterator(chunk_refs, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
     samples = SelectManyIterator(source_iterator=randomized_chunk_refs, collection_selector=read_chunk_fn)
     # wrap the I/O operation in a prefetch iterator
-    # BUGBUG: This currently fails the test suite (although it seems to work)
-    if prefetch_buffer_size:
-        samples = PrefetchIterator(samples, prefetch_buffer_size)
+    if prefetch:
+        samples = PrefetchIterator(samples, buffer_size)
     # set up the item randomizer
     if shuffle:
-        # use different seed for BufferedShuffleGenerator
-        if (use_block):
-            samples = BlockShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
-        else:
+        if (use_windowed):
             samples = BufferedShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
+        else:
+            samples = BlockShuffleIterator(samples, buffer_size, bump_seed(seed, 1))
     # apply transform, if given
     if transform is not None:
         samples = MapIterator(samples, transform)

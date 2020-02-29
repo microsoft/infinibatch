@@ -100,6 +100,6 @@ chunk_file_paths.sort()  # make sure file order is always the same, independent 
 print("block_randomize: reading from", len(chunk_file_paths), "chunk files", file=sys.stderr)
 
 ds = chunked_dataset_iterator(chunk_refs=chunk_file_paths, read_chunk_fn=lambda path: read_utf8_file(path, credential),
-                              shuffle=True, buffer_size=1000000, seed=1)
+                              shuffle=True, buffer_size=1000000, seed=1, use_windowed=True)
 for line in ds:
     print(line)
