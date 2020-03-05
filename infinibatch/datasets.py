@@ -14,12 +14,12 @@ def bump_seed(seed: Optional[int], step = 1):
     return None if seed is None else seed + 1
 
 
-def chunked_dataset_iterator(chunk_refs: List, read_chunk_fn: Callable[[Any], Iterator],
-                             train: bool=True, shuffle: bool=True,
-                             buffer_size: int=2**20, transform: Callable[[Any],Any]=None,
-                             prefetch: bool=True, seed: Optional[int]=None,
-                             num_instances: int=1, instance_rank: int=0,
-                             use_windowed: bool=False):
+def chunked_dataset_iterator(chunk_refs: List, read_chunk_fn: Callable[[Any], Iterator], buffer_size: int,
+                             train: bool=True,
+                             seed: Optional[int]=None, shuffle: bool=True, use_windowed: bool=False,
+                             transform: Callable[[Any],Any]=None,
+                             prefetch: bool=True,
+                             num_instances: int=1, instance_rank: int=0):
     """
     Dataset reading data from gzipped chunks.
 
