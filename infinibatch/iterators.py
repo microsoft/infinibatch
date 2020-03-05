@@ -3,6 +3,7 @@ import collections
 import copy
 import gzip
 from itertools import cycle, islice
+import math
 import os
 from queue import Full, Queue
 from random import Random
@@ -105,25 +106,43 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         return item
 
 
-class InfinitePermutationIterator(CheckpointableIterator):
+def ChunkedSourceIterator(source: List, num_instances: int=1, instance_rank: int=0):
+    """
+    Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank.
+
+    This is a source iterator: It is meant to be used at the beginning of a data loading pipeline.
+    As such, it takes a list as its source and not a CheckpointableIterator.
+
+    Args:
+        source: input list, must not be empty and must be small enough to fit into RAM entirely
+        num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
+        instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
+    """
+    # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
+    chunk_size = math.ceil(len(source) / num_instances)
+    chunk = source[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
+    return NativeCheckpointableIterator(chunk)
+
+
+class InfinitePermutationSourceIterator(CheckpointableIterator):
     """
     Infinitely generates permutations of the items in the given iterable.
 
     Unlike most classes here, this one loads all items into RAM. For example, this is used
     for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
     """
-    def __init__(self, source_iterator: Iterator, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+    def __init__(self, source: List, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
         Args:
-            source_iterator: input iterator (must not be infinite, and small enough to fit into RAM entirely)
+            source: input list, must not be empty and must be small enough to fit into RAM entirely
             seed: random seed used for shuffling (or None)
             shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
-            num_instances: number of instances of this dataset. Meant for use with multi-process data loading, e.g., in distributed training.
-            instance_rank: rank of this instance of the dataset. Meant for use with multi-process data loading, e.g., in distributed training.
+            num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
+            instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         """
-        self._source_items = list(source_iterator)  # keep a local copy
+        self._source_items = copy.deepcopy(source)  # keep a local copy
         if not self._source_items:
-            raise ValueError("InfinitePermutationIterator: source_iterator must not be empty")
+            raise ValueError("InfinitePermutationIterator: source must not be empty")
         self._shuffle = shuffle
         self._seed = seed
         self._num_instances = num_instances

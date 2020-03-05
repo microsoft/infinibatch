@@ -9,7 +9,7 @@ import unittest
 import pickle
 import gc
 
-from infinibatch.iterators import InfinitePermutationIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
+from infinibatch.iterators import ChunkedSourceIterator, InfinitePermutationSourceIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
@@ -106,10 +106,24 @@ class TestBase(unittest.TestCase):
         self.assertSetEqual(set(a), set(b))
 
 
-class TestInfinitePermutationIterator(TestBase):
+class TestChunkedSourceIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        self.expected_result = list(range(53))
+        self.iterator = ChunkedSourceIterator(self.expected_result)
+
+    def test_multiple_instance(self):
+        for num_instances in range(2, 17):
+            items = []
+            for rank in range(num_instances):
+                iterator = ChunkedSourceIterator(self.expected_result, num_instances=num_instances, instance_rank=rank)
+                items.extend(list(iterator))
+            self.assertListEqual(items, self.expected_result)
+
+
+class TestInfinitePermutationSourceIterator(TestBase):
     def test_repeat_once(self):
         # This tests that two consecutive iterations through the test data yields differently ordered sequences.
-        reader = iter(InfinitePermutationIterator(self.flattened_test_data, 42))
+        reader = iter(InfinitePermutationSourceIterator(self.flattened_test_data, 42))
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
         self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
@@ -117,7 +131,7 @@ class TestInfinitePermutationIterator(TestBase):
 
     def test_reiter_once(self):
         # This differs from test_repeat_once in that we use checkpoints.
-        reader = InfinitePermutationIterator(self.flattened_test_data, 42)
+        reader = InfinitePermutationSourceIterator(self.flattened_test_data, 42)
         checkpoint = reader.getstate()
         items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
         reader.setstate(checkpoint)
@@ -133,8 +147,8 @@ class TestInfinitePermutationIterator(TestBase):
             test_first_output_length  = random.randrange(5,25)
             test_second_output_length = random.randrange(5,25)
             # source
-            test_source = range(test_source_length)
-            reader = InfinitePermutationIterator(test_source, seed=i)
+            test_source = list(range(test_source_length))
+            reader = InfinitePermutationSourceIterator(test_source, seed=i)
             # fetch a first sequence
             _ = list(itertools.islice(reader, test_first_output_length))
             # fetch a second sequence
@@ -232,8 +246,8 @@ class TestSelectManyIterator(TestBase):
         shutil.rmtree(crlf_dir)
 
     def test_checkpointing(self):
-        chunk_file_paths = (os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz'))
-        chunk_file_paths = InfinitePermutationIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
+        chunk_file_paths = [os.path.join(self.data_dir, subpath.name) for subpath in os.scandir(self.data_dir) if subpath.is_file() and subpath.name.endswith('.gz')]
+        chunk_file_paths = InfinitePermutationSourceIterator(chunk_file_paths, shuffle=False)  # using this as checkpointed cycle()
         random = Random(1)
         for _ in range(5):
             first_length = random.randrange(11,31)

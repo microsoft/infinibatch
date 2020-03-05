@@ -1,4 +1,4 @@
-from .iterators import InfinitePermutationIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
+from .iterators import InfinitePermutationSourceIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
 from typing import Union, Iterable, Iterator, Callable, Any, Optional, Dict
 import os, sys
 
@@ -38,7 +38,7 @@ def chunked_dataset_iterator(chunk_refs: Iterable, read_chunk_fn: Callable[[Any]
         use_windowed: temporary option to switch back to the WindowedShuffleIterator (default False). Will go away once shown that we don't need it anymore.
     """
     # set up the chunk reader
-    randomized_chunk_refs  = InfinitePermutationIterator(chunk_refs, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+    randomized_chunk_refs  = InfinitePermutationSourceIterator(chunk_refs, seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
     samples = SelectManyIterator(source_iterator=randomized_chunk_refs, collection_selector=read_chunk_fn)
     # wrap the I/O operation in a prefetch iterator
