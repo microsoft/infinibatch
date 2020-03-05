@@ -143,13 +143,13 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
     def __init__(self, source: List, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
         Args:
-            source: input list, must not be empty and must be small enough to fit into RAM entirely
+            source: input list, must not be empty and must be small enough to fit into RAM entirely, ownership of the data goes to the iterator, do not modify it!
             seed: random seed used for shuffling (or None)
             shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
             num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         """
-        self._source_items = copy.deepcopy(source)  # keep a local copy
+        self._source_items = source.copy()  # keep a local copy
         if not self._source_items:
             raise ValueError("InfinitePermutationIterator: source must not be empty")
         self._shuffle = shuffle
