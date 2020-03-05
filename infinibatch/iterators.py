@@ -106,6 +106,15 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         return item
 
 
+def SourceIterator(source: List, train: bool=True, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+    if not train and shuffle:
+        raise ValueError('shuffling is not supported when train=False')
+    if train:
+        return InfinitePermutationSourceIterator(source, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+    else:
+        return ChunkedSourceIterator(source, num_instances=num_instances, instance_rank=instance_rank)
+
+
 def ChunkedSourceIterator(source: List, num_instances: int=1, instance_rank: int=0):
     """
     Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank.

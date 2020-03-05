@@ -9,7 +9,7 @@ import unittest
 import pickle
 import gc
 
-from infinibatch.iterators import ChunkedSourceIterator, InfinitePermutationSourceIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
+from infinibatch.iterators import SourceIterator, ChunkedSourceIterator, InfinitePermutationSourceIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
@@ -104,6 +104,11 @@ class TestBase(unittest.TestCase):
     def assertMultisetEqual(self, a, b):
         self.assertEqual(len(a), len(b))
         self.assertSetEqual(set(a), set(b))
+
+
+class TestSourceIterator(unittest.TestCase):
+    def test_exception(self):
+        self.assertRaises(ValueError, SourceIterator, [1], train=False, shuffle=True)
 
 
 class TestChunkedSourceIterator(unittest.TestCase, TestCheckpointableIterator):
