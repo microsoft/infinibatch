@@ -1,5 +1,5 @@
 from .iterators import SourceIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
-from typing import Union, Iterable, Iterator, Callable, Any, Optional, Dict
+from typing import List, Union, Iterable, Iterator, Callable, Any, Optional, Dict
 import os, sys
 
 """
