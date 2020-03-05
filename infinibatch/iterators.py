@@ -129,6 +129,9 @@ def ChunkedSourceIterator(source: List, num_instances: int=1, instance_rank: int
     """
     # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
     chunk_size = math.ceil(len(source) / num_instances)
+    # this does not cause any out-of-bounds issues:
+    # a slice with a start-index beyong the end of the list is empty,
+    # and an end-index of a slice is capped at the end of the list
     chunk = source[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
     return NativeCheckpointableIterator(chunk)
 
