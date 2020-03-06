@@ -106,16 +106,16 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         return item
 
 
-def SourceIterator(source: List, train: bool=True, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+def create_source_iterator(source_items: List, train: bool=True, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
     if not train and shuffle:
         raise ValueError('shuffling is not supported when train=False')
     if train:
-        return InfinitePermutationSourceIterator(source, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+        return InfinitePermutationSourceIterator(source_items, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     else:
-        return ChunkedSourceIterator(source, num_instances=num_instances, instance_rank=instance_rank)
+        return ChunkedSourceIterator(source_items, num_instances=num_instances, instance_rank=instance_rank)
 
 
-def ChunkedSourceIterator(source: List, num_instances: int=1, instance_rank: int=0):
+def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_rank: int=0):
     """
     Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank.
 
@@ -123,16 +123,16 @@ def ChunkedSourceIterator(source: List, num_instances: int=1, instance_rank: int
     As such, it takes a list as its source and not a CheckpointableIterator.
 
     Args:
-        source: input list, must not be empty and must be small enough to fit into RAM entirely
+        source_items: input list, must not be empty and must be small enough to fit into RAM entirely, ownership of the list and the data goes to the iterator, do not modify it!
         num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
     """
     # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
-    chunk_size = math.ceil(len(source) / num_instances)
+    chunk_size = math.ceil(len(source_items) / num_instances)
     # this does not cause any out-of-bounds issues:
     # a slice with a start-index beyong the end of the list is empty,
     # and an end-index of a slice is capped at the end of the list
-    chunk = source[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
+    chunk = source_items[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
     return NativeCheckpointableIterator(chunk)
 
 
@@ -143,16 +143,16 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
     Unlike most classes here, this one loads all items into RAM. For example, this is used
     for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
     """
-    def __init__(self, source: List, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+    def __init__(self, source_items: List, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
         Args:
-            source: input list, must not be empty and must be small enough to fit into RAM entirely, ownership of the data goes to the iterator, do not modify it!
+            source_items: input list, must not be empty and must be small enough to fit into RAM entirely, ownership of the list and the data goes to the iterator, do not modify it!
             seed: random seed used for shuffling (or None)
             shuffle: set False to bypass the shuffling. Then this is just a checkpointed version of itertools.cycle(). (Default: True)
             num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         """
-        self._source_items = source.copy()  # keep a local copy
+        self._source_items = source_items
         if not self._source_items:
             raise ValueError("InfinitePermutationIterator: source must not be empty")
         self._shuffle = shuffle

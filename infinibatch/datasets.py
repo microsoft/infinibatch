@@ -1,4 +1,4 @@
-from .iterators import SourceIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
+from .iterators import create_source_iterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
 from typing import List, Union, Iterable, Iterator, Callable, Any, Optional, Dict
 import os, sys
 
@@ -47,7 +47,7 @@ def chunked_dataset_iterator(chunk_refs: List, read_chunk_fn: Callable[[Any], It
     if not train and shuffle:
         raise ValueError('shuffling is not supported when train=False')
     # set up the chunk reader
-    chunk_refs = SourceIterator(chunk_refs, train=train, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+    chunk_refs = create_source_iterator(chunk_refs, train=train, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
     samples = SelectManyIterator(source_iterator=chunk_refs, collection_selector=read_chunk_fn)
     # wrap the I/O operation in a prefetch iterator
