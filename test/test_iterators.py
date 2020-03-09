@@ -306,7 +306,6 @@ class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
 
 
 class TestParallelMapIterator(unittest.TestCase, TestCheckpointableIterator):
-    # This also tests BatchedParallelMapIterator
     def setUp(self):
         data = list(range(53))
         self.expected_result = [map_fun(n) for n in data]
