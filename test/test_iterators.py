@@ -11,7 +11,7 @@ import gc
 
 from infinibatch.iterators import create_source_iterator, ChunkedSourceIterator, InfinitePermutationSourceIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, \
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
-                                  MapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
+                                  MapIterator, ParallelMapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
                                   PrefetchIterator
 from infinibatch.datasets import chunked_dataset_iterator
@@ -294,13 +294,23 @@ class TestBlockwiseShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
+def map_fun(n):
+    return n + 1
+
+
 class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         data = list(range(53))
-        def fun(n):
-            return n + 1
-        self.expected_result = [fun(n) for n in data]
-        self.iterator = MapIterator(NativeCheckpointableIterator(data), fun)
+        self.expected_result = [map_fun(n) for n in data]
+        self.iterator = MapIterator(NativeCheckpointableIterator(data), map_fun)
+
+
+class TestParallelMapIterator(unittest.TestCase, TestCheckpointableIterator):
+    # This also tests BatchedParallelMapIterator
+    def setUp(self):
+        data = list(range(53))
+        self.expected_result = [map_fun(n) for n in data]
+        self.iterator = ParallelMapIterator(NativeCheckpointableIterator(data), map_fun, 5, 7)
 
 
 class TestZipIterator(unittest.TestCase, TestCheckpointableIterator):

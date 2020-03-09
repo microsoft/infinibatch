@@ -4,6 +4,7 @@ import copy
 import gzip
 from itertools import cycle, islice
 import math
+from multiprocessing import Pool
 import os
 from queue import Full, Queue
 from random import Random
@@ -312,7 +313,7 @@ class MapIterator(CheckpointableIterator):
     """
     Applies given tranform to each data item
     """
-    def __init__(self, source_iterator: CheckpointableIterator, transform: Callable[[str],Any]=None):
+    def __init__(self, source_iterator: CheckpointableIterator, transform: Callable[[str],Any]):
         """
         Args:
             source_iterator: checkpointable iterator
@@ -322,15 +323,51 @@ class MapIterator(CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator
         self._transform = transform
+        self.setstate(None)
 
     def getstate(self) -> Dict:
         return self._source_iterator.getstate()
 
     def setstate(self, checkpoint: Optional[Dict]):
         self._source_iterator.setstate(checkpoint)
+        self._iterator = self._generate()
+
+    def _generate(self):
+        for item in self._source_iterator:
+            yield self._transform(item)
 
     def __next__(self):
-        return self._transform(next(self._source_iterator))
+        return next(self._iterator)
+
+
+class BatchedParallelMapIterator(MapIterator):
+    """
+    Consumes lists of data items, applies transform to each data item using parallel map, and yields list of transformed data items
+
+    While this can be used directly, it is often more convenient to use the ParallelMapIterator below.
+    """
+    def __init__(self, source_iterator: CheckpointableIterator, transform: Callable[[str],Any], num_processes: int):
+        """
+        Args:
+            source_iterator: checkpointable iterator
+            transform: function to be applied to each data item
+            num_processes: number of process used in parallel map
+        """
+        self._num_processes = num_processes
+        super().__init__(source_iterator, transform)  # make sure to call this after _num_processes has been set
+
+    def _generate(self):
+        with Pool(self._num_processes) as p:
+            for buffer in self._source_iterator:
+                buffer = p.map(self._transform, buffer)
+                yield buffer
+
+
+def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Callable[[str],Any], num_processes: int, num_items_per_process: int):
+    batched_samples = FixedBatchIterator(source_iterator, num_processes * num_items_per_process)
+    batched_transformed_samples = BatchedParallelMapIterator(batched_samples, transform, num_processes)
+    transformed_samples = SelectManyIterator(batched_transformed_samples, lambda x: x)
+    return transformed_samples
 
 
 class ZipIterator(CheckpointableIterator):
