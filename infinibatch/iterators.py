@@ -335,6 +335,21 @@ class MapIterator(CheckpointableIterator):
 
 
 def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Callable[[str],Any], num_processes: int, num_items_per_process: int):
+    """
+    Applies given transform to each data item
+
+    Behaves the same as MapIterator, but applies transform in parallel using multiple processes in a parallel map operation.
+
+    Warning:
+    The transform function has to be pickleable because it is sent across process boundaries.
+    To achieve this, it should be a top-level function.
+
+    Args:
+        source_iterator: checkpointable iterator
+        transform: function to be applied to each data item, has to be pickleable, see above
+        num_processes: number of processes to use for parallel map
+        num_items_per_process: number of data items each process operates on
+    """
     batched_samples = FixedBatchIterator(source_iterator, num_processes * num_items_per_process)
     def create_parallel_map_transform(transform):
         # create process pool and return closure that performs parallel map
