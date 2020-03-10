@@ -12,7 +12,7 @@ from threading import Thread
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
 
 
-from .closablequeue import ClosableQueue, ClosedException
+from infinibatch.closablequeue import ClosableQueue, ClosedException
 
 
 """
