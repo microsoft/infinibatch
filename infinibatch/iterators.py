@@ -206,13 +206,14 @@ class SelectManyIterator(CheckpointableIterator):
     """
     Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
     """
-    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Callable[[Any], Iterator]):
+    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Optional[Callable[[Any], Iterator]]=None):
         """
         Args:
+            source_iterator: iterator over the items to pass to collection_selector()
             collection_selector: user callback that maps an item into an Iterable, whose items will be yielded.
                                  The returned Iterator is used only once. Hence, it is also allowed to
                                  return self-iterables, such as iterators and generator expressions.
-            source_iterator: iterator over the items to pass to collection_selector()
+                                 If None is given, no callback is applied.
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
@@ -232,7 +233,10 @@ class SelectManyIterator(CheckpointableIterator):
             skip_to_checkpoint = self._flattened_items_yielded
             # main loop over source source_items
             for source_item in self._source_iterator:
-                data = iter(self._collection_selector(source_item))
+                if self._collection_selector is not None:
+                    data = iter(self._collection_selector(source_item))
+                else:
+                    data = iter(source_item)
                 self._flattened_items_yielded = 0
                 if skip_to_checkpoint:
                     #print("Skipping to index", skip_to_checkpoint, file=sys.stderr)
@@ -359,7 +363,7 @@ def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Call
     # apply transform in parallel to data items in a batch
     batched_transformed_samples = MapIterator(batched_samples, parallel_map_transform)
     # unpack batches to go back to stream of (now transformed) data items
-    transformed_samples = SelectManyIterator(batched_transformed_samples, lambda x: x)
+    transformed_samples = SelectManyIterator(batched_transformed_samples)
     return transformed_samples
 
 

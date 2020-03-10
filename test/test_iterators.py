@@ -230,6 +230,12 @@ class TestSelectManyIterator(TestBase):
         items = list(self._select_many_from_chunks(NativeCheckpointableIterator(self.chunk_file_paths)))
         self.assertListEqual(items, self.flattened_test_data)
 
+    def test_no_selector(self):
+        data = list(range(100))
+        sublists = [data[:10], data[10:42], data[42: 87], data[87:]]
+        result = list(SelectManyIterator(NativeCheckpointableIterator(sublists)))
+        self.assertListEqual(result, data)
+
     def test_different_line_endings(self):
         # write data in binary mode with LF line endings
         lf_dir = tempfile.mkdtemp()
