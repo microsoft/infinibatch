@@ -351,13 +351,11 @@ def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Call
         num_items_per_process: number of data items each process operates on
     """
     batched_samples = FixedBatchIterator(source_iterator, num_processes * num_items_per_process)
-    def create_parallel_map_transform(transform):
-        # create process pool and return closure that performs parallel map
-        p = Pool(num_processes)
-        def parallel_map_transform(buffer):
-            return p.map(transform, buffer)
-        return parallel_map_transform
-    batched_transformed_samples = MapIterator(batched_samples, create_parallel_map_transform(transform))
+    # create process pool and capture it in closure that performs parallel map
+    p = Pool(num_processes)
+    def parallel_map_transform(buffer):
+        return p.map(transform, buffer)
+    batched_transformed_samples = MapIterator(batched_samples, parallel_map_transform)
     transformed_samples = SelectManyIterator(batched_transformed_samples, lambda x: x)
     return transformed_samples
 
