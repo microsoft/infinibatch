@@ -4,6 +4,7 @@ import copy
 import gzip
 from itertools import cycle, islice
 import math
+from multiprocessing import Pool
 import os
 from queue import Full, Queue
 from random import Random
@@ -205,13 +206,14 @@ class SelectManyIterator(CheckpointableIterator):
     """
     Projects each element of a source sequence to a sequence and flattens the resulting sequences into one sequence.
     """
-    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Callable[[Any], Iterator]):
+    def __init__(self, source_iterator: CheckpointableIterator, collection_selector: Optional[Callable[[Any], Iterator]]=None):
         """
         Args:
+            source_iterator: iterator over the items to pass to collection_selector()
             collection_selector: user callback that maps an item into an Iterable, whose items will be yielded.
                                  The returned Iterator is used only once. Hence, it is also allowed to
                                  return self-iterables, such as iterators and generator expressions.
-            source_iterator: iterator over the items to pass to collection_selector()
+                                 If None is given, no callback is applied.
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
@@ -231,7 +233,10 @@ class SelectManyIterator(CheckpointableIterator):
             skip_to_checkpoint = self._flattened_items_yielded
             # main loop over source source_items
             for source_item in self._source_iterator:
-                data = iter(self._collection_selector(source_item))
+                if self._collection_selector is not None:
+                    data = iter(self._collection_selector(source_item))
+                else:
+                    data = iter(source_item)
                 self._flattened_items_yielded = 0
                 if skip_to_checkpoint:
                     #print("Skipping to index", skip_to_checkpoint, file=sys.stderr)
@@ -312,7 +317,7 @@ class MapIterator(CheckpointableIterator):
     """
     Applies given tranform to each data item
     """
-    def __init__(self, source_iterator: CheckpointableIterator, transform: Callable[[str],Any]=None):
+    def __init__(self, source_iterator: CheckpointableIterator, transform: Callable[[str],Any]):
         """
         Args:
             source_iterator: checkpointable iterator
@@ -331,6 +336,35 @@ class MapIterator(CheckpointableIterator):
 
     def __next__(self):
         return self._transform(next(self._source_iterator))
+
+
+def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Callable[[str],Any], num_processes: int, num_items_per_process: int):
+    """
+    Applies given transform to each data item
+
+    Behaves the same as MapIterator, but applies transform in parallel using multiple processes in a parallel map operation.
+
+    Warning:
+    The transform function has to be pickleable because it is sent across process boundaries.
+    To achieve this, transform should be a top-level function.
+
+    Args:
+        source_iterator: checkpointable iterator
+        transform: function to be applied to each data item, has to be pickleable, see above
+        num_processes: number of processes to use for parallel map
+        num_items_per_process: number of data items each process operates on
+    """
+    # divide stream of data items into batches
+    batched_samples = FixedBatchIterator(source_iterator, num_processes * num_items_per_process)
+    # create process pool and capture it in closure that performs parallel map
+    p = Pool(num_processes)
+    def parallel_map_transform(buffer):
+        return p.map(transform, buffer)
+    # apply transform in parallel to data items in a batch
+    batched_transformed_samples = MapIterator(batched_samples, parallel_map_transform)
+    # unpack batches to go back to stream of (now transformed) data items
+    transformed_samples = SelectManyIterator(batched_transformed_samples)
+    return transformed_samples
 
 
 class ZipIterator(CheckpointableIterator):
