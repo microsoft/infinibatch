@@ -1,3 +1,7 @@
+"""
+This is the main module of Infinibatch containing all iterators.
+"""
+
 from abc import abstractmethod
 import collections
 import copy
@@ -15,32 +19,12 @@ from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Opt
 from infinibatch.closablequeue import ClosableQueue, ClosedException
 
 
-"""
-infinibatch -- A library of checkpointable iterators for randomized data loading of massive data sets
-in deep-neural-network training.
-
-Features:
-
-  * support for corpora much larger than fit into RAM
-  * hierarchical block+sentence-level randomization over the whole corpus, different randomization in each epoch
-  * only load the data that is needed
-  * very fast start-up time (does not need to read full corpus)
-  * only requires the most basic of data preparation (e.g. no indexing)
-  * for multi-GPU, only load what the respective GPU needs
-  * 100% accurate check-pointing, restore from checkpoint should not read all data up to the checkpoint
-  * support automatic bucketed batching with dynamic batch sizes
-  * pre-fetching thread
-  * composable, as to support for complex batching, e.g. negative samples from multiple documents
-"""
-
-
 # TODO for next release:
 #  - benchmark the accuracy when using BlockwiseShuffleIterator vs. the BufferedShuffleIterator
 #  - change all convenience functions back to true classes, using a wrapper class
 
 # TODO later:
 # - make iterator pipeline work for streaming data
-
 
 def _advance_iterator(iterator: Iterator, n: int):
     """ Little helper to advance an iterator by n items """
@@ -51,7 +35,7 @@ def _advance_iterator(iterator: Iterator, n: int):
 
 class CheckpointableIterator(collections.abc.Iterator):
     """
-    Abstract base class for iterators that are checkpointable
+    Abstract base class for checkpointable iterators
     
     The interface (getstate, setstate) is inspired by Python's random package.
     """
@@ -66,10 +50,30 @@ class CheckpointableIterator(collections.abc.Iterator):
 
     @abstractmethod
     def getstate(self) -> Dict:
+        """
+        Get checkpoint of current state of iterator
+        
+        In a pipeline of iterators, this function __recursively__ calls itself on the preceeding iterator
+        and includes the gathered information in the returned checkpoint.
+        Thereby, to obtain a checkpoint of the state of an entire pipeline of iterators
+        you only have to call this function on the __last__ iterator in the pipeline.
+        """
         pass
 
     @abstractmethod
     def setstate(self, checkpoint: Optional[Dict]):
+        """
+        Set state of iterator to given checkpoint
+
+        In a pipeline of iterators, this function __recursively__ calls itself on the preceeding iterator.
+        Thereby, to set the state of an entire pipeline of iterators to a given checkpoint
+        you only have to call this function on the __last__ iterator in the pipeline.
+
+        Args:
+            checkpoint: Checkpoint that should be used to reset the state of the iterator (or pipeline).
+                        If this is __None__, the state of the iterator (or pipeline) is reset to the initial
+                        state immediately after construction.
+        """
         pass
 
     @abstractmethod
@@ -79,9 +83,9 @@ class CheckpointableIterator(collections.abc.Iterator):
 
 class NativeCheckpointableIterator(CheckpointableIterator):
     """
-    Simple checkpointable wrapper around native Python iterable.
-    This version just replays the iterator all the way to the checkpoint, which will
-    make it inefficient for some important use cases.
+    Simple wrapper class that turns a Python list into a CheckpointableIterator
+    
+    When calling setstate on this class, it simply replays the iterator all the way to the checkpoint one element at a time, which can make it inefficient for some use-cases.
 
     Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an __iter__ function that simply returns self, but does not reset.
     """
@@ -118,7 +122,7 @@ def create_source_iterator(source_items: List, train: bool=True, seed: Optional[
 
 def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_rank: int=0):
     """
-    Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank.
+    Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank
 
     This is a source iterator: It is meant to be used at the beginning of a data loading pipeline.
     As such, it takes a list as its source and not a CheckpointableIterator.
