@@ -342,7 +342,7 @@ def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Call
 
     Warning:
     The transform function has to be pickleable because it is sent across process boundaries.
-    To achieve this, it should be a top-level function.
+    To achieve this, transform should be a top-level function.
 
     Args:
         source_iterator: checkpointable iterator
@@ -350,12 +350,15 @@ def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Call
         num_processes: number of processes to use for parallel map
         num_items_per_process: number of data items each process operates on
     """
+    # divide stream of data items into batches
     batched_samples = FixedBatchIterator(source_iterator, num_processes * num_items_per_process)
     # create process pool and capture it in closure that performs parallel map
     p = Pool(num_processes)
     def parallel_map_transform(buffer):
         return p.map(transform, buffer)
+    # apply transform in parallel to data items in a batch
     batched_transformed_samples = MapIterator(batched_samples, parallel_map_transform)
+    # unpack batches to go back to stream of (now transformed) data items
     transformed_samples = SelectManyIterator(batched_transformed_samples, lambda x: x)
     return transformed_samples
 
