@@ -24,45 +24,45 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python"># import torch
-# from infinibatch.iterators import CheckpointableIterator
-# from infinibatch.datasets  import chunked_dataset_iterator
-# from typing import Union, Iterable, Any
+<pre><code class="python">import torch
+from infinibatch.iterators import CheckpointableIterator
+from infinibatch.datasets  import chunked_dataset_iterator
+from typing import Union, Iterable, Any
 
 
-# # @TODO: This has been tested once, but we have no regression test presently. I am worried tests will fail if Torch is not installed.
-# class IterableCheckpointedDataset(torch.utils.data.IterableDataset):
-#     &#34;&#34;&#34;
-#     Wraps a CheckpointableIterator into a PyTorch IterableDataset, which is recognized by its type by
-#     PyTorch&#39;s DataLoader class.
-#     &#34;&#34;&#34;
-#     def __init__(self, source: CheckpointableIterator):
-#         super().__init__()
-#         self._source = source
+# @TODO: This has been tested once, but we have no regression test presently. I am worried tests will fail if Torch is not installed.
+class IterableCheckpointedDataset(torch.utils.data.IterableDataset):
+    &#34;&#34;&#34;
+    Wraps a CheckpointableIterator into a PyTorch IterableDataset, which is recognized by its type by
+    PyTorch&#39;s DataLoader class.
+    &#34;&#34;&#34;
+    def __init__(self, source: CheckpointableIterator):
+        super().__init__()
+        self._source = source
 
-#     def __iter__(self):  # this is called in the forked clone
-#         worker_info = torch.utils.data.get_worker_info()
-#         assert worker_info is None or worker_info.num_workers == 1  # not supported since we can&#39;t get at the checkpoint for each worker
-#         return iter(self._source)
+    def __iter__(self):  # this is called in the forked clone
+        worker_info = torch.utils.data.get_worker_info()
+        assert worker_info is None or worker_info.num_workers == 1  # not supported since we can&#39;t get at the checkpoint for each worker
+        return iter(self._source)
 
 
-# # @TODO: This is currently untested, and may not work presently.
-# class IterableChunkedDataset(torch.utils.data.IterableDataset):
-#     def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: int=None, world_size: int=1, rank: int=0, num_workers_per_rank: int=1):
-#         super().__init__()
-#         self.rank = rank
-#         self.num_workers_per_rank = num_workers_per_rank
-#         # instance_rank is set assuming that num_workers_per_rank = 1 and adapted dynamically in __iter__
-#         self.dataset = chunked_dataset_iterator(paths, shuffle=shuffle, buffer_size=buffer_size, transform=transform, seed=seed, num_instances=world_size*num_workers_per_rank, instance_rank=rank)
+# @TODO: This is currently untested, and may not work presently.
+class IterableChunkedDataset(torch.utils.data.IterableDataset):
+    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: int=None, world_size: int=1, rank: int=0, num_workers_per_rank: int=1):
+        super().__init__()
+        self.rank = rank
+        self.num_workers_per_rank = num_workers_per_rank
+        # instance_rank is set assuming that num_workers_per_rank = 1 and adapted dynamically in __iter__
+        self.dataset = chunked_dataset_iterator(paths, shuffle=shuffle, buffer_size=buffer_size, transform=transform, seed=seed, num_instances=world_size*num_workers_per_rank, instance_rank=rank)
 
-#     def __iter__(self):
-#         worker_info = torch.utils.data.get_worker_info()
-#         if worker_info is None:  # single-process data loading
-#             self.dataset._instance_rank = self.rank
-#         else:
-#             assert worker_info.num_workers == self.num_workers_per_rank
-#             self.dataset._instance_rank = self.rank * self.num_workers_per_rank + worker_info.id
-#         return iter(self.dataset)</code></pre>
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading
+            self.dataset._instance_rank = self.rank
+        else:
+            assert worker_info.num_workers == self.num_workers_per_rank
+            self.dataset._instance_rank = self.rank * self.num_workers_per_rank + worker_info.id
+        return iter(self.dataset)</code></pre>
 </details>
 </section>
 <section>
@@ -72,6 +72,167 @@
 <section>
 </section>
 <section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="infinibatch.torch.data.IterableCheckpointedDataset"><code class="flex name class">
+<span>class <span class="ident">IterableCheckpointedDataset</span></span>
+<span>(</span><span>source: <a title="infinibatch.iterators.CheckpointableIterator" href="../iterators.html#infinibatch.iterators.CheckpointableIterator">CheckpointableIterator</a>)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Wraps a CheckpointableIterator into a PyTorch IterableDataset, which is recognized by its type by
+PyTorch's DataLoader class.</p></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class IterableCheckpointedDataset(torch.utils.data.IterableDataset):
+    &#34;&#34;&#34;
+    Wraps a CheckpointableIterator into a PyTorch IterableDataset, which is recognized by its type by
+    PyTorch&#39;s DataLoader class.
+    &#34;&#34;&#34;
+    def __init__(self, source: CheckpointableIterator):
+        super().__init__()
+        self._source = source
+
+    def __iter__(self):  # this is called in the forked clone
+        worker_info = torch.utils.data.get_worker_info()
+        assert worker_info is None or worker_info.num_workers == 1  # not supported since we can&#39;t get at the checkpoint for each worker
+        return iter(self._source)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>torch.utils.data.dataset.IterableDataset</li>
+<li>torch.utils.data.dataset.Dataset</li>
+</ul>
+</dd>
+<dt id="infinibatch.torch.data.IterableChunkedDataset"><code class="flex name class">
+<span>class <span class="ident">IterableChunkedDataset</span></span>
+<span>(</span><span>paths: Union[str, Iterable[str]], shuffle: bool = True, buffer_size: int = 1048576, transform=None, seed: int = None, world_size: int = 1, rank: int = 0, num_workers_per_rank: int = 1)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>An iterable Dataset.</p>
+<p>All datasets that represent an iterable of data samples should subclass it.
+Such form of datasets is particularly useful when data come from a stream.</p>
+<p>All subclasses should overwrite :meth:<code>__iter__</code>, which would return an
+iterator of samples in this dataset.</p>
+<p>When a subclass is used with :class:<code>~torch.utils.data.DataLoader</code>, each
+item in the dataset will be yielded from the :class:<code>~torch.utils.data.DataLoader</code>
+iterator. When :attr:<code>num_workers &gt; 0</code>, each worker process will have a
+different copy of the dataset object, so it is often desired to configure
+each copy independently to avoid having duplicate data returned from the
+workers. :func:<code>~torch.utils.data.get_worker_info</code>, when called in a worker
+process, returns information about the worker. It can be used in either the
+dataset's :meth:<code>__iter__</code> method or the :class:<code>~torch.utils.data.DataLoader</code> 's
+:attr:<code>worker_init_fn</code> option to modify each copy's behavior.</p>
+<p>Example 1: splitting workload across all workers in :meth:<code>__iter__</code>::</p>
+<pre><code>&gt;&gt;&gt; class MyIterableDataset(torch.utils.data.IterableDataset):
+...     def __init__(self, start, end):
+...         super(MyIterableDataset).__init__()
+...         assert end &gt; start, "this example code only works with end &gt;= start"
+...         self.start = start
+...         self.end = end
+...
+...     def __iter__(self):
+...         worker_info = torch.utils.data.get_worker_info()
+...         if worker_info is None:  # single-process data loading, return the full iterator
+...             iter_start = self.start
+...             iter_end = self.end
+...         else:  # in a worker process
+...             # split workload
+...             per_worker = int(math.ceil((self.end - self.start) / float(worker_info.num_workers)))
+...             worker_id = worker_info.id
+...             iter_start = self.start + worker_id * per_worker
+...             iter_end = min(iter_start + per_worker, self.end)
+...         return iter(range(iter_start, iter_end))
+...
+&gt;&gt;&gt; # should give same set of data as range(3, 7), i.e., [3, 4, 5, 6].
+&gt;&gt;&gt; ds = MyIterableDataset(start=3, end=7)
+
+&gt;&gt;&gt; # Single-process loading
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=0)))
+[3, 4, 5, 6]
+
+&gt;&gt;&gt; # Mult-process loading with two worker processes
+&gt;&gt;&gt; # Worker 0 fetched [3, 4].  Worker 1 fetched [5, 6].
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=2)))
+[3, 5, 4, 6]
+
+&gt;&gt;&gt; # With even more workers
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=20)))
+[3, 4, 5, 6]
+</code></pre>
+<p>Example 2: splitting workload across all workers using :attr:<code>worker_init_fn</code>::</p>
+<pre><code>&gt;&gt;&gt; class MyIterableDataset(torch.utils.data.IterableDataset):
+...     def __init__(self, start, end):
+...         super(MyIterableDataset).__init__()
+...         assert end &gt; start, "this example code only works with end &gt;= start"
+...         self.start = start
+...         self.end = end
+...
+...     def __iter__(self):
+...         return iter(range(self.start, self.end))
+...
+&gt;&gt;&gt; # should give same set of data as range(3, 7), i.e., [3, 4, 5, 6].
+&gt;&gt;&gt; ds = MyIterableDataset(start=3, end=7)
+
+&gt;&gt;&gt; # Single-process loading
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=0)))
+[3, 4, 5, 6]
+&gt;&gt;&gt;
+&gt;&gt;&gt; # Directly doing multi-process loading yields duplicate data
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=2)))
+[3, 3, 4, 4, 5, 5, 6, 6]
+
+&gt;&gt;&gt; # Define a `worker_init_fn` that configures each dataset copy differently
+&gt;&gt;&gt; def worker_init_fn(worker_id):
+...     worker_info = torch.utils.data.get_worker_info()
+...     dataset = worker_info.dataset  # the dataset copy in this worker process
+...     overall_start = dataset.start
+...     overall_end = dataset.end
+...     # configure the dataset to only process the split workload
+...     per_worker = int(math.ceil((overall_end - overall_start) / float(worker_info.num_workers)))
+...     worker_id = worker_info.id
+...     dataset.start = overall_start + worker_id * per_worker
+...     dataset.end = min(dataset.start + per_worker, overall_end)
+...
+
+&gt;&gt;&gt; # Mult-process loading with the custom `worker_init_fn`
+&gt;&gt;&gt; # Worker 0 fetched [3, 4].  Worker 1 fetched [5, 6].
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=2, worker_init_fn=worker_init_fn)))
+[3, 5, 4, 6]
+
+&gt;&gt;&gt; # With even more workers
+&gt;&gt;&gt; print(list(torch.utils.data.DataLoader(ds, num_workers=20, worker_init_fn=worker_init_fn)))
+[3, 4, 5, 6]
+</code></pre></section>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class IterableChunkedDataset(torch.utils.data.IterableDataset):
+    def __init__(self, paths: Union[str, Iterable[str]], shuffle: bool=True, buffer_size: int=2**20, transform=None, seed: int=None, world_size: int=1, rank: int=0, num_workers_per_rank: int=1):
+        super().__init__()
+        self.rank = rank
+        self.num_workers_per_rank = num_workers_per_rank
+        # instance_rank is set assuming that num_workers_per_rank = 1 and adapted dynamically in __iter__
+        self.dataset = chunked_dataset_iterator(paths, shuffle=shuffle, buffer_size=buffer_size, transform=transform, seed=seed, num_instances=world_size*num_workers_per_rank, instance_rank=rank)
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading
+            self.dataset._instance_rank = self.rank
+        else:
+            assert worker_info.num_workers == self.num_workers_per_rank
+            self.dataset._instance_rank = self.rank * self.num_workers_per_rank + worker_info.id
+        return iter(self.dataset)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>torch.utils.data.dataset.IterableDataset</li>
+<li>torch.utils.data.dataset.Dataset</li>
+</ul>
+</dd>
+</dl>
 </section>
 </article>
 <nav id="sidebar">
@@ -83,6 +244,16 @@
 <li><h3>Super-module</h3>
 <ul>
 <li><code><a title="infinibatch.torch" href="index.html">infinibatch.torch</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="infinibatch.torch.data.IterableCheckpointedDataset" href="#infinibatch.torch.data.IterableCheckpointedDataset">IterableCheckpointedDataset</a></code></h4>
+</li>
+<li>
+<h4><code><a title="infinibatch.torch.data.IterableChunkedDataset" href="#infinibatch.torch.data.IterableChunkedDataset">IterableChunkedDataset</a></code></h4>
+</li>
 </ul>
 </li>
 </ul>
