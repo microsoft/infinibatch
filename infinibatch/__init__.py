@@ -14,4 +14,9 @@ Infinibatch is a library of checkpointable iterators for randomized data loading
   * support automatic bucketed batching with dynamic batch sizes
   * pre-fetching thread
   * composable, as to support for complex batching, e.g. negative samples from multiple documents
+
+
+# Getting Started
+
+To get started, please look at documentation of the module `iterators`.
 """

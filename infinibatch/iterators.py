@@ -1,5 +1,55 @@
 """
-This is the main module of Infinibatch containing all iterators.
+# Overview
+
+Building a complex data loader with Infinibatch is achieved by combining iterators from this module into a pipeline.
+To show an easy example, we create a small test dataset.
+>>> dataset = list(range(6)) # [0, 1, 2, 3, 4, 5]
+
+We can turn this dataset into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
+>>> it = NativeCheckpointableIterator(dataset) # [0, 1, 2, 3, 4, 5]
+
+We can then modify the data items using a `MapIterator`,
+which applies a given function to each individual data item.
+For example, we can multiply each data item by 2.
+>>> it = MapIterator(it, lambda n: 2 * n) # [0, 2, 4, 6, 8, 10]
+
+We can restructure the dataset by batching together pairs of data items into lists using a `FixedBatchIterator`.
+>>> it = FixedBatchIterator(it, batch_size=2) # [[0, 2], [4, 6], [8, 10]]
+
+Using another `MapIterator`, we can reduce each of these lists to its second element.
+>>> it = MapIterator(it, lambda l: l[1]) # [2, 6, 10]
+
+Finally, we can use the resulting iterator `it` just like any standard Python iterator.
+>>> product = 1
+>>> for item in it:
+...     product *= item
+>>> print(product)
+120
+
+One of the main features that distinguishes the iterators in Infinibatch from standard Python iterators
+is that our iterators support __checkpointing__:
+
+Every iterator has a function `getstate` that can be used to get a checkpoint of the current state of the iterator
+and a function `setstate` that can be used to reset an iterator to a prior state.
+
+
+
+# Source Iterators
+
+# Common Usages
+
+- use gzip chunks
+- training pipeline example
+- inference pipeline example
+- pipeline that can do both
+
+# TODO
+
+- data is not processed all at once, but on-the-fly; all processing is done on the fly
+- iterators work the same as Python iterators
+- What sets them apart from standard Python iterators is that they also support __checkpointing__.
+- two types of iterators, classes and functions
+
 """
 
 from abc import abstractmethod
@@ -579,7 +629,7 @@ def SamplingRandomMapIterator(source_iterator: CheckpointableIterator, transform
         seed: random seed
     """
     _random = Random()
-    if seed:
+    if seed is not None:
         _random.seed(seed)
     def _step_function(state, item):
         _random.setstate(state)

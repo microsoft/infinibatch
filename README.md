@@ -4,4 +4,17 @@ To run unit tests, run the following command.
 ```
 python -m unittest discover -s test
 ```
-If your default Python is < 3.6, then use `python3.6` instead.
+
+To run doctests for the iterators, run the following command.
+```
+python -m doctest -v infinibatch\iterators.py
+```
+
+When working on the documentation, install pdoc:
+```
+pip install pdoc3
+```
+You can then start a local http server that dynamically updates the documentation:
+```
+pdoc --template-dir docs --http : infinibatch
+```
