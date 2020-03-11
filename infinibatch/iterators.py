@@ -1,7 +1,12 @@
 """
 # Overview
 
-## Basic Usage
+Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
+and built-in support for __checkpointing__.
+In this section, we give an introduction to these features and the basic usage of the Infinibatch iterator library.
+
+
+## Iterators
 
 Infinibatch enables you to build complex data loaders by combining iterators from this module into a pipeline.
 We demonstrate this with an easy (but artificial) example.
@@ -100,11 +105,58 @@ Thereby, we expect the next element to be `6`.
 
 
 # Types of Iterators
+
+This section provides a brief overview of the different types of iterators in Infinibatch.
+
+
 ## Classes and Factory Functions
+
+Most iterators in this module are implemented as classes that inherit from the abstract base class `CheckpointableIterator`.
+However, some iterators (such as the `BlockwiseShuffleIterator`) are simple combinations of other iterators.
+These iterators are implemented as __factory functions__ that construct a pipeline of iterators
+and return the last iterator in the pipeline.
+For consistency with class-based iterators,
+we name these factory function using CamelCase instead of the more pythonic use_of_underscores.
+
+
 ## Source Iterators
+
+There are three iterators that are intended to go at the __beginning__ of a data loading pipeline:
+
+- `NativeCheckpointableIterator`:
+This iterator wraps a Python iterable and makes it checkpointable.
+It is mainly intended for demonstration and debugging purproses.
+- `InfinitePermutationSourceIterator`:
+This iterator accepts a list, shuffles it, and yields its elements.
+It repeats this infinitely, shuffling the list after each pass.
+Thereby, __this iterator is infinte and cannot be exhausted__.
+This iterator is meant to be used as the first iterator in a training scenario
+and supports splitting the data for multi-GPU training.
+- `ChunkedSourceIterator`:
+This iterator accepts a list and yields its elements.
+It is meant to be used as the first iterator in an inference of validation scenario
+and supports splitting the data for mult-GPU inference.
+
+
 ## Shuffling
-## Batching and SelectMany
+
+Todo: Describe `BufferedShuffleIterator` and `BlockwiseShuffleIterator`.
+
+
+## Batching, SelectMany, and Windowing
+
+Todo: Describe `FixedBatchIterator`, `SelectManyIterator`, and `WindowedIterator`.
+
+
+## Mapping
+
+Todo: Describe `MapIterator`, `ParallelMapIterator`, `RecurrentIterator`, and `SamplingRandomMapIterator`.
+
+
 ## Other Iterators
+
+Todo: Describe `ZipIterator`, `PrefetchIterator`, and `BucketedReadaheadBatchIterator`.
+
 
 # A More Realistic Example
 
@@ -112,10 +164,6 @@ Thereby, we expect the next element to be `6`.
 - training pipeline example
 - inference pipeline example
 - pipeline that can do both
-
-# TODO
-
-- two types of iterators, classes and functions
 
 """
 
