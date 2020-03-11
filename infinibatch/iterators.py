@@ -23,11 +23,14 @@ Using another `MapIterator`, we can reduce each of these lists to its second ele
 >>> it = MapIterator(it, lambda l: l[1]) # [2, 6, 10]
 
 Finally, we can use the resulting iterator `it` just like any standard Python iterator.
->>> product = 1
+```py
 >>> for item in it:
-...     product *= item
->>> print(product)
-120
+...     print(item)
+2
+6
+10
+
+```
 
 By using iterators, Infinibatch operates in a __lazy__ fashion:
 It generally doesn't apply operations to an entire dataset at once,
@@ -57,9 +60,51 @@ to capture the state of the entire pipeline.
 Internally, this is achieved by recursive calls that traverse the entire data loading pipeline to collect the state of every iterator in it.
 Similarly, when you want to reset a pipeline to a previous state, you only have to call `setstate` on the __last__ iterator in the pipeline.
 
+To demonstrate this, we recreate the pipeline from the previous section.
+>>> dataset = list(range(6)) # [0, 1, 2, 3, 4, 5]
+>>> it = NativeCheckpointableIterator(dataset) # [0, 1, 2, 3, 4, 5]
+>>> it = MapIterator(it, lambda n: 2 * n) # [0, 2, 4, 6, 8, 10]
+>>> it = FixedBatchIterator(it, batch_size=2) # [[0, 2], [4, 6], [8, 10]]
+>>> it = MapIterator(it, lambda l: l[1]) # [2, 6, 10]
+
+Since `it` behaves just like a standard Python iterator, we can call `next` to retrieve its first element.
+>>> next(it)
+2
+
+We can now call `getstate` on `it` (which is the last `MapIterator` in the pipeline)
+to get a checkpoint of the internal state of the entire data loading pipeline.
+>>> checkpoint = it.getstate()
+
+Note that the checkpoint represents the internal state of the pipeline after the data item `2` has been retrieved.
+Using the checkpoint, we can always return to this __exact__ point in the dataset.
+To show this, let's exhaust the iterator by casting it to a list.
+>>> list(it)
+[6, 10]
+
+Since the iterator is now exhausted, calling `next` raises a `StopIteration` exception.
+```
+>>> next(it)
+Traceback (most recent call last):
+    ...
+StopIteration
+
+```
+
+We can now reset the pipeline to the checkpoint using `setstate`.
+>>> it.setstate(checkpoint)
+
+This recovers the state of the pipeline after the data item `2` has been retrieved.
+Thereby, we expect the next element to be `6`.
+>>> next(it)
+6
+
 
 # Types of Iterators
+## Classes and Factory Functions
 ## Source Iterators
+## Shuffling
+## Batching and SelectMany
+## Other Iterators
 
 # A More Realistic Example
 
