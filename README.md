@@ -2,7 +2,7 @@
 
 ## Documentation
 
-The documentation can be found in [here](docs/infinibatch/index.html).
+To view the documentation, please clone the repository and go to docs/infinibatch/index.html
 
 ## Contribution
 
