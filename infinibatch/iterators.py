@@ -83,11 +83,11 @@ class CheckpointableIterator(collections.abc.Iterator):
 
 class NativeCheckpointableIterator(CheckpointableIterator):
     """
-    Simple wrapper class that turns a Python list into a CheckpointableIterator
+    Simple wrapper class that turns a Python Iterable into a CheckpointableIterator
     
     When calling setstate on this class, it simply replays the iterator all the way to the checkpoint one element at a time, which can make it inefficient for some use-cases.
 
-    Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an __iter__ function that simply returns self, but does not reset.
+    Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an `__iter__` function that simply returns self, but does not reset.
     """
     def __init__(self, iterable: Iterable):
         # check whether iterable is iterable or iterator:
@@ -124,7 +124,8 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
     """
     Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank
 
-    This is a source iterator: It is meant to be used at the beginning of a data loading pipeline.
+    This is a source iterator:
+    It is meant to be used at the beginning of a data loading pipeline.
     As such, it takes a list as its source and not a CheckpointableIterator.
 
     Args:
@@ -143,10 +144,14 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
 
 class InfinitePermutationSourceIterator(CheckpointableIterator):
     """
-    Infinitely generates permutations of the items in the given iterable.
+    Infinitely generates permutations of the items in the given list.
 
-    Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
+    This is a source iterator:
+    It is meant to be used at the beginning of a data loading pipeline.
+    As such, it takes a list as its source and not a CheckpointableIterator.
+    The given list is loaded completely into RAM.
+
+    For example, this is used for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
     """
     def __init__(self, source_items: List, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
