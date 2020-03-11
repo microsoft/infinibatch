@@ -1,8 +1,11 @@
 """
 # Overview
 
-Building a complex data loader with Infinibatch is achieved by combining iterators from this module into a pipeline.
-To show an easy example, we create a small test dataset.
+## Basic Usage
+
+Infinibatch enables you to build complex data loaders by combining iterators from this module into a pipeline.
+We demonstrate this with an easy (but artificial) example.
+First, we create a small test dataset.
 >>> dataset = list(range(6)) # [0, 1, 2, 3, 4, 5]
 
 We can turn this dataset into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
@@ -26,17 +29,39 @@ Finally, we can use the resulting iterator `it` just like any standard Python it
 >>> print(product)
 120
 
-One of the main features that distinguishes the iterators in Infinibatch from standard Python iterators
-is that our iterators support __checkpointing__:
-
-Every iterator has a function `getstate` that can be used to get a checkpoint of the current state of the iterator
-and a function `setstate` that can be used to reset an iterator to a prior state.
-
+By using iterators, Infinibatch operates in a __lazy__ fashion:
+It generally doesn't apply operations to an entire dataset at once,
+but rather operates on individual data items on-the-fly as they are consumed.
+When used correctly, this allows Infinibatch to have a low start-up time and low memory overhead.
 
 
-# Source Iterators
+## Checkpointing
 
-# Common Usages
+The main features that sets Infinibatch iterators apart from standard Python iterators is that they support __checkpointing__.
+A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a dataset.
+Once you retrieve a checkpoint, you can later use it to reset the pipeline of iterators to the exact state it was in
+when the checkpoint was created.
+This features is particularly useful when you're training large deep neural network models over days or weeks,
+and you want to make sure that, in case your training is interrupted for any reason, __you can pick up your training exactly where you left off__.
+
+The checkpointing interface consists of two functions `getstate` and `setstate` that are defined in `CheckpointableIterator`,
+the common base class of all iterators in this module.
+As the names suggest `getstate` returns a checkpoint object that represents the state of a pipeline at the time the function is called,
+and 'setstate' receives a checkpoint object to reset the state of a pipeline.
+`setstate` also accepts `None`, which resets a pipeline to the __beginning__ of the iteration,
+i.e. the state of the pipeline immediately after its construction.
+
+It is important to realize that __a checkpoint represents the state of a complete pipeline of iterators__.
+If you have a pipeline consisting of a sequence of iterators, you only have to call `getstate` on the __last__ iterator in the sequence
+to capture the state of the entire pipeline.
+Internally, this is achieved by recursive calls that traverse the entire data loading pipeline to collect the state of every iterator in it.
+Similarly, when you want to reset a pipeline to a previous state, you only have to call `setstate` on the __last__ iterator in the pipeline.
+
+
+# Types of Iterators
+## Source Iterators
+
+# A More Realistic Example
 
 - use gzip chunks
 - training pipeline example
@@ -45,9 +70,6 @@ and a function `setstate` that can be used to reset an iterator to a prior state
 
 # TODO
 
-- data is not processed all at once, but on-the-fly; all processing is done on the fly
-- iterators work the same as Python iterators
-- What sets them apart from standard Python iterators is that they also support __checkpointing__.
 - two types of iterators, classes and functions
 
 """
