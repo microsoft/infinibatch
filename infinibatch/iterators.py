@@ -118,6 +118,10 @@ and return the last iterator in the pipeline.
 For consistency with class-based iterators,
 we name these factory function using CamelCase instead of the more pythonic use_of_underscores.
 
+.. todo::
+    We currently also have one factory function that actually looks like one: `create_source_iterator`.
+    Describe this or change it.
+
 
 ## Source Iterators
 
@@ -140,31 +144,34 @@ and supports splitting the data for mult-GPU inference.
 
 ## Shuffling
 
-Todo: Describe `BufferedShuffleIterator` and `BlockwiseShuffleIterator`.
+.. todo:: Describe `BufferedShuffleIterator` and `BlockwiseShuffleIterator`.
 
 
 ## Batching, SelectMany, and Windowing
 
-Todo: Describe `FixedBatchIterator`, `SelectManyIterator`, and `WindowedIterator`.
+.. todo:: Describe `FixedBatchIterator`, `SelectManyIterator`, and `WindowedIterator`.
 
 
 ## Mapping
 
-Todo: Describe `MapIterator`, `ParallelMapIterator`, `RecurrentIterator`, and `SamplingRandomMapIterator`.
+.. todo:: Describe `MapIterator`, `ParallelMapIterator`, `RecurrentIterator`, and `SamplingRandomMapIterator`.
 
 
 ## Other Iterators
 
-Todo: Describe `ZipIterator`, `PrefetchIterator`, and `BucketedReadaheadBatchIterator`.
+.. todo:: Describe `ZipIterator`, `PrefetchIterator`, and `BucketedReadaheadBatchIterator`.
 
 
 # A More Realistic Example
 
-- use gzip chunks
-- training pipeline example
-- inference pipeline example
-- pipeline that can do both
+.. todo::
+    Give a more realistic example following, in broad strokes, the ChunkedDataset including:
 
+    - use gzip chunks
+    - training pipeline example
+    - inference pipeline example
+    - pipeline that can do both
+    - etc.
 """
 
 from abc import abstractmethod
