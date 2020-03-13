@@ -18,6 +18,9 @@ from infinibatch.datasets import chunked_dataset_iterator
 
 
 # TODO:
+#  - make sure that all iterators can be reset to a checkpoint even after they were exhausted
+#  - make sure that all iterators can be reset to a checkpoint that was taken after the iterator was exhausted
+#  - make sure that all iterators can be reset to a checkpoint at the beginning of the iteration
 #  - refactor test cases that do not rely on TestCheckpointableIterator
 #  - make sure every iterator is tested for correct checkpointing at the end of the iterator
 

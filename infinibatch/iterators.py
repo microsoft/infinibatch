@@ -1,3 +1,219 @@
+"""
+.. todo::
+    Add a QuickStart guide including:
+
+    - Describe what the data format is (blocks of gz-files) and how to prepare them (shell commands)
+    - Give an example of how to use the dataset iterator
+    - Refer to stuff below for more documentation
+    - Refer to more realistic example below
+    - maybe this should go in the Infinibatch package documentation and not here ...
+
+
+# Overview
+
+Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
+and built-in support for __checkpointing__.
+In this section, we give an introduction to these features and the basic usage of the Infinibatch iterator library.
+
+
+## Iterators
+
+As a Python programmer, you are probably familiar with the concept of iterators.
+According to the [Python documentation](https://docs.python.org/3.5/glossary.html#term-iterator),
+an iterator is an object representing a stream of data,
+and repeated calls to the iterator's `__next__()` method (or passing it to the built-in function `next()`)
+return successive items in the stream.
+It is important not to confuse an [iterator](https://docs.python.org/3.5/glossary.html#term-iterator)
+with an [iterable](https://docs.python.org/3.5/glossary.html#term-iterable).
+For more information on this subject, please follow the links above.
+
+The Python standard library contains a module of iterators called `itertool`
+that bears some resembles to Infinibatch.
+Infinibatch differs from `itertools` in two ways:
+
+1. Infinibatch provides iterators specifically for the purpose of creating __randomized batches of data for machine learning__.
+2. All iterators in Infinibatch support __checkpointing__ (see the following section).
+
+Infinibatch iterators are not directly compatible with itertools due to the checkpointing requirement.
+
+Infinibatch enables you to build complex data loaders by combining iterators from this module into a pipeline.
+To give you a high-level idea of how this is works, we provide a very simple example.
+Note that this example is completely artificial and does not solve any useful task.
+Its only purpose is to demonstrate the behavior of a pipeline of iterators.
+We provide a more realistic example in a later section.
+
+First, we create a small test data set.
+>>> dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
+
+We can turn this data set into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
+>>> it = NativeCheckpointableIterator(dataset) # 0, 1, 2, 3, 4, 5
+
+We can then transform the data items using a `MapIterator`,
+which applies a given function to each individual data item.
+For example, we can multiply each data item by 2.
+>>> it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
+
+We can restructure the data set by batching together pairs of data items into lists using a `FixedBatchIterator`.
+>>> it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
+
+Using another `MapIterator`, we can reduce each of these lists to its second element.
+>>> it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
+
+Finally, we can use the resulting iterator `it` just like any standard Python iterator.
+```py
+>>> for item in it:
+...     print(item)
+2
+6
+10
+
+```
+
+By using iterators, Infinibatch operates in a __lazy__ fashion:
+It generally doesn't apply operations to an entire data set at once,
+but rather operates on individual data items on-the-fly as they are consumed.
+When used correctly, this allows Infinibatch to have a low start-up time and low memory overhead.
+For more detail on this, please consult the section on performance considerations below.
+
+
+## Checkpointing
+
+The main features that sets Infinibatch iterators apart from standard Python iterators is that they support __checkpointing__.
+A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a data set.
+Once you retrieve a checkpoint, you can later use it to reset the pipeline of iterators to the exact state it was in
+when the checkpoint was created.
+Checkpoints can easily be serialized and stored to disk using [Pythons `pickle` module](https://docs.python.org/3.5/library/pickle.html).
+Infinibatch's checkpointing feature is particularly useful when you're training large deep neural network models over days or weeks,
+and you want to make sure that, in case your training is interrupted for any reason, __you can pick up your training exactly where you left off__.
+
+The checkpointing interface consists of two functions `getstate` and `setstate` that are defined in `CheckpointableIterator`,
+the common base class of all iterators in this module.
+As the names suggest `getstate` returns a checkpoint object that represents the state of a pipeline at the time the function is called,
+and 'setstate' receives a checkpoint object to reset the state of a pipeline.
+`setstate` also accepts `None`, which resets a pipeline to the __beginning__ of the iteration,
+i.e. the state of the pipeline immediately after its construction.
+
+It is important to realize that __a checkpoint represents the state of a complete pipeline of iterators__.
+If you have a pipeline consisting of a sequence of iterators, you only have to call `getstate` on the __last__ iterator in the sequence
+to capture the state of the entire pipeline.
+Internally, this is achieved by recursive calls that traverse the entire data loading pipeline to collect the state of every iterator in it.
+Similarly, when you want to reset a pipeline to a previous state, you only have to call `setstate` on the __last__ iterator in the pipeline.
+
+
+To demonstrate this, we recreate the pipeline from the previous section.
+>>> dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
+>>> it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
+>>> it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
+>>> it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
+>>> it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
+
+Since `it` behaves just like a standard Python iterator, we can call `next` to retrieve its first element.
+>>> next(it)
+2
+
+We can now call `getstate` on `it` (which is the last `MapIterator` in the pipeline)
+to get a checkpoint of the internal state of the entire data loading pipeline.
+>>> checkpoint = it.getstate()
+
+Note that the checkpoint represents the internal state of the pipeline after the data item `2` has been retrieved.
+Using the checkpoint, we can always return to this __exact__ point in the data set.
+To show this, let's exhaust the iterator by casting it to a list.
+>>> list(it)
+[6, 10]
+
+Since the iterator is now exhausted, calling `next` raises a `StopIteration` exception.
+```
+>>> next(it)
+Traceback (most recent call last):
+    ...
+StopIteration
+
+```
+
+We can now reset the pipeline to the checkpoint using `setstate`.
+>>> it.setstate(checkpoint)
+
+This recovers the state of the pipeline after the data item `2` has been retrieved.
+Thereby, we expect the next element to be `6`.
+>>> next(it)
+6
+
+
+# Types of Iterators
+
+This section provides a brief overview of the different types of iterators in Infinibatch.
+
+
+## Classes and Factory Functions
+
+Most iterators in this module are implemented as classes that inherit from the abstract base class `CheckpointableIterator`.
+However, some iterators (such as the `BlockwiseShuffleIterator`) are simple combinations of other iterators.
+These iterators are implemented as __factory functions__ that construct a pipeline of iterators
+and return the last iterator in the pipeline.
+For consistency with class-based iterators,
+we name these factory function using CamelCase instead of the more pythonic use_of_underscores.
+
+.. todo::
+    We currently also have one factory function that actually looks like one: `create_source_iterator`.
+    Provide a comment on this describing why that is.
+
+
+## Source Iterators
+
+There are three iterators that are intended to go at the __beginning__ of a data loading pipeline:
+
+- `InfinitePermutationSourceIterator`:
+This iterator accepts a list, shuffles it, and yields its elements.
+It repeats this infinitely, shuffling the list after each pass.
+Thereby, __this iterator is infinte and cannot be exhausted__.
+This iterator is meant to be used as the first iterator in a training scenario
+and supports splitting the data for multi-GPU training.
+- `ChunkedSourceIterator`:
+This iterator accepts a list and yields its elements.
+It is meant to be used as the first iterator in an inference or validation scenario
+and supports splitting the data for mult-GPU inference.
+- `NativeCheckpointableIterator`:
+This iterator wraps a Python iterable and makes it checkpointable.
+It is mainly intended for demonstration and debugging purposes.
+
+
+## Shuffling
+
+.. todo:: Describe `BufferedShuffleIterator` and `BlockwiseShuffleIterator`.
+
+
+## Batching, SelectMany, and Windowing
+
+.. todo:: Describe `FixedBatchIterator`, `SelectManyIterator`, and `WindowedIterator`.
+
+
+## Mapping
+
+.. todo:: Describe `MapIterator`, `ParallelMapIterator`, `RecurrentIterator`, and `SamplingRandomMapIterator`.
+
+
+## Other Iterators
+
+.. todo:: Describe `ZipIterator`, `PrefetchIterator`, and `BucketedReadaheadBatchIterator`.
+
+
+# A More Realistic Example
+
+.. todo::
+    Give a more realistic example following, in broad strokes, the ChunkedDataset including:
+
+    - use gzip chunks
+    - training pipeline example
+    - inference pipeline example
+    - pipeline that can do both
+    - etc.
+
+# Performance Considerations
+
+.. todo::
+    Describe what parameters influence performance measures such as memory usage and start-up time.
+"""
+
 from abc import abstractmethod
 import collections
 import copy
@@ -12,26 +228,7 @@ from threading import Thread
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
 
 
-from .closablequeue import ClosableQueue, ClosedException
-
-
-"""
-infinibatch -- A library of checkpointable iterators for randomized data loading of massive data sets
-in deep-neural-network training.
-
-Features:
-
-  * support for corpora much larger than fit into RAM
-  * hierarchical block+sentence-level randomization over the whole corpus, different randomization in each epoch
-  * only load the data that is needed
-  * very fast start-up time (does not need to read full corpus)
-  * only requires the most basic of data preparation (e.g. no indexing)
-  * for multi-GPU, only load what the respective GPU needs
-  * 100% accurate check-pointing, restore from checkpoint should not read all data up to the checkpoint
-  * support automatic bucketed batching with dynamic batch sizes
-  * pre-fetching thread
-  * composable, as to support for complex batching, e.g. negative samples from multiple documents
-"""
+from infinibatch.closablequeue import ClosableQueue, ClosedException
 
 
 # TODO for next release:
@@ -40,7 +237,6 @@ Features:
 
 # TODO later:
 # - make iterator pipeline work for streaming data
-
 
 def _advance_iterator(iterator: Iterator, n: int):
     """ Little helper to advance an iterator by n items """
@@ -51,12 +247,43 @@ def _advance_iterator(iterator: Iterator, n: int):
 
 class CheckpointableIterator(collections.abc.Iterator):
     """
-    Abstract base class for iterators that are checkpointable
+    Abstract base class that defines the interface for checkpointing.
     
     The interface (getstate, setstate) is inspired by Python's random package.
     """
     def __iter__(self):
         return self
+
+    @abstractmethod
+    def getstate(self) -> Dict:
+        """
+        Get checkpoint of current state of iterator
+        
+        In a pipeline of iterators, this function __recursively__ calls itself on the preceeding iterator
+        and includes the gathered information in the returned checkpoint.
+        Thereby, to obtain a checkpoint of the state of an entire pipeline of iterators
+        you only have to call this function on the __last__ iterator in the pipeline.
+        A checkpoint is represented as a `dict`,
+        but the caller should treat a checkpoint as an opaque object
+        and not make any assumptions about the existence or meaning of the `dict` entries.
+        """
+        pass
+
+    @abstractmethod
+    def setstate(self, checkpoint: Optional[Dict]):
+        """
+        Set state of iterator to given checkpoint
+
+        In a pipeline of iterators, this function __recursively__ calls itself on the preceeding iterator.
+        Thereby, to set the state of an entire pipeline of iterators to a given checkpoint
+        you only have to call this function on the __last__ iterator in the pipeline.
+
+        Args:
+            checkpoint: Checkpoint that should be used to reset the state of the iterator (or pipeline).
+                        If this is __None__, the state of the iterator (or pipeline) is reset to the initial
+                        state immediately after construction.
+        """
+        pass
 
     def __getstate__(self) -> Dict:  # implementation of pickle Protocol
         return self.getstate()
@@ -65,25 +292,18 @@ class CheckpointableIterator(collections.abc.Iterator):
         self.setstate(checkpoint)
 
     @abstractmethod
-    def getstate(self) -> Dict:
-        pass
-
-    @abstractmethod
-    def setstate(self, checkpoint: Optional[Dict]):
-        pass
-
-    @abstractmethod
     def __next__(self):
         pass
 
 
 class NativeCheckpointableIterator(CheckpointableIterator):
     """
-    Simple checkpointable wrapper around native Python iterable.
-    This version just replays the iterator all the way to the checkpoint, which will
-    make it inefficient for some important use cases.
+    Simple wrapper class that turns a Python Iterable into a CheckpointableIterator
+    
+    When calling setstate on this class, it simply replays the iterator all the way to the checkpoint one element at a time,
+    which makes it generally inefficient.
 
-    Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an __iter__ function that simply returns self, but does not reset.
+    Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an `__iter__` function that simply returns self, but does not reset.
     """
     def __init__(self, iterable: Iterable):
         # check whether iterable is iterable or iterator:
@@ -118,9 +338,10 @@ def create_source_iterator(source_items: List, train: bool=True, seed: Optional[
 
 def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_rank: int=0):
     """
-    Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank.
+    Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank
 
-    This is a source iterator: It is meant to be used at the beginning of a data loading pipeline.
+    This is a source iterator:
+    It is meant to be used at the beginning of a data loading pipeline.
     As such, it takes a list as its source and not a CheckpointableIterator.
 
     Args:
@@ -139,10 +360,14 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
 
 class InfinitePermutationSourceIterator(CheckpointableIterator):
     """
-    Infinitely generates permutations of the items in the given iterable.
+    Infinitely generates permutations of the items in the given list.
 
-    Unlike most classes here, this one loads all items into RAM. For example, this is used
-    for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
+    This is a source iterator:
+    It is meant to be used at the beginning of a data loading pipeline.
+    As such, it takes a list as its source and not a CheckpointableIterator.
+    The given list is loaded completely into RAM.
+
+    For example, this is used for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
     """
     def __init__(self, source_items: List, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
@@ -570,7 +795,7 @@ def SamplingRandomMapIterator(source_iterator: CheckpointableIterator, transform
         seed: random seed
     """
     _random = Random()
-    if seed:
+    if seed is not None:
         _random.seed(seed)
     def _step_function(state, item):
         _random.setstate(state)
