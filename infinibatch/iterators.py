@@ -38,22 +38,22 @@ Infinibatch iterators are not directly compatible with itertools due to the chec
 
 Infinibatch enables you to build complex data loaders by combining iterators from this module into a pipeline.
 We demonstrate this with an easy (but artificial) example.
-First, we create a small test dataset.
->>> dataset = list(range(6)) # [0, 1, 2, 3, 4, 5]
+First, we create a small test data set.
+>>> dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 
-We can turn this dataset into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
->>> it = NativeCheckpointableIterator(dataset) # [0, 1, 2, 3, 4, 5]
+We can turn this data set into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
+>>> it = NativeCheckpointableIterator(dataset) # 0, 1, 2, 3, 4, 5
 
-We can then modify the data items using a `MapIterator`,
+We can then transform the data items using a `MapIterator`,
 which applies a given function to each individual data item.
 For example, we can multiply each data item by 2.
->>> it = MapIterator(it, lambda n: 2 * n) # [0, 2, 4, 6, 8, 10]
+>>> it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
 
-We can restructure the dataset by batching together pairs of data items into lists using a `FixedBatchIterator`.
->>> it = FixedBatchIterator(it, batch_size=2) # [[0, 2], [4, 6], [8, 10]]
+We can restructure the data set by batching together pairs of data items into lists using a `FixedBatchIterator`.
+>>> it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
 
 Using another `MapIterator`, we can reduce each of these lists to its second element.
->>> it = MapIterator(it, lambda l: l[1]) # [2, 6, 10]
+>>> it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
 
 Finally, we can use the resulting iterator `it` just like any standard Python iterator.
 ```py
@@ -66,7 +66,7 @@ Finally, we can use the resulting iterator `it` just like any standard Python it
 ```
 
 By using iterators, Infinibatch operates in a __lazy__ fashion:
-It generally doesn't apply operations to an entire dataset at once,
+It generally doesn't apply operations to an entire data set at once,
 but rather operates on individual data items on-the-fly as they are consumed.
 When used correctly, this allows Infinibatch to have a low start-up time and low memory overhead.
 
@@ -74,10 +74,11 @@ When used correctly, this allows Infinibatch to have a low start-up time and low
 ## Checkpointing
 
 The main features that sets Infinibatch iterators apart from standard Python iterators is that they support __checkpointing__.
-A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a dataset.
+A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a data set.
 Once you retrieve a checkpoint, you can later use it to reset the pipeline of iterators to the exact state it was in
 when the checkpoint was created.
-This features is particularly useful when you're training large deep neural network models over days or weeks,
+Checkpoints can easily be serialized and stored to disk using [Pythons `pickle` module](https://docs.python.org/3.5/library/pickle.html).
+Infinibatch's checkpointing feature is particularly useful when you're training large deep neural network models over days or weeks,
 and you want to make sure that, in case your training is interrupted for any reason, __you can pick up your training exactly where you left off__.
 
 The checkpointing interface consists of two functions `getstate` and `setstate` that are defined in `CheckpointableIterator`,
@@ -93,12 +94,13 @@ to capture the state of the entire pipeline.
 Internally, this is achieved by recursive calls that traverse the entire data loading pipeline to collect the state of every iterator in it.
 Similarly, when you want to reset a pipeline to a previous state, you only have to call `setstate` on the __last__ iterator in the pipeline.
 
+
 To demonstrate this, we recreate the pipeline from the previous section.
->>> dataset = list(range(6)) # [0, 1, 2, 3, 4, 5]
->>> it = NativeCheckpointableIterator(dataset) # [0, 1, 2, 3, 4, 5]
->>> it = MapIterator(it, lambda n: 2 * n) # [0, 2, 4, 6, 8, 10]
->>> it = FixedBatchIterator(it, batch_size=2) # [[0, 2], [4, 6], [8, 10]]
->>> it = MapIterator(it, lambda l: l[1]) # [2, 6, 10]
+>>> dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
+>>> it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
+>>> it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
+>>> it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
+>>> it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
 
 Since `it` behaves just like a standard Python iterator, we can call `next` to retrieve its first element.
 >>> next(it)
@@ -109,7 +111,7 @@ to get a checkpoint of the internal state of the entire data loading pipeline.
 >>> checkpoint = it.getstate()
 
 Note that the checkpoint represents the internal state of the pipeline after the data item `2` has been retrieved.
-Using the checkpoint, we can always return to this __exact__ point in the dataset.
+Using the checkpoint, we can always return to this __exact__ point in the data set.
 To show this, let's exhaust the iterator by casting it to a list.
 >>> list(it)
 [6, 10]
