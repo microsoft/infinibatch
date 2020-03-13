@@ -37,7 +37,11 @@ Infinibatch differs from `itertools` in two ways:
 Infinibatch iterators are not directly compatible with itertools due to the checkpointing requirement.
 
 Infinibatch enables you to build complex data loaders by combining iterators from this module into a pipeline.
-We demonstrate this with an easy (but artificial) example.
+To give you a high-level idea of how this is works, we provide a very simple example.
+Note that this example is completely artificial and does not solve any useful task.
+Its only purpose is to demonstrate the behavior of a pipeline of iterators.
+We provide a more realistic example in a later section.
+
 First, we create a small test data set.
 >>> dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 
@@ -69,6 +73,7 @@ By using iterators, Infinibatch operates in a __lazy__ fashion:
 It generally doesn't apply operations to an entire data set at once,
 but rather operates on individual data items on-the-fly as they are consumed.
 When used correctly, this allows Infinibatch to have a low start-up time and low memory overhead.
+For more detail on this, please consult the section on performance considerations below.
 
 
 ## Checkpointing
@@ -202,6 +207,11 @@ It is mainly intended for demonstration and debugging purposes.
     - inference pipeline example
     - pipeline that can do both
     - etc.
+
+# Performance Considerations
+
+.. todo::
+    Describe what parameters influence performance measures such as memory usage and start-up time.
 """
 
 from abc import abstractmethod
@@ -237,7 +247,7 @@ def _advance_iterator(iterator: Iterator, n: int):
 
 class CheckpointableIterator(collections.abc.Iterator):
     """
-    Abstract base class for checkpointable iterators
+    Abstract base class that defines the interface for checkpointing.
     
     The interface (getstate, setstate) is inspired by Python's random package.
     """
