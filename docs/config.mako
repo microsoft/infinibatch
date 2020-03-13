@@ -1,4 +1,6 @@
 <%!
+    # This is a configuration file for pdoc3, the tool we use for generating html documentation from docstrings.
+    # Please look at the README.md for instruction on how to generate the documentation.
     # Template configuration. Copy over in your template directory
     # (used with --template-dir) and adapt as required.
     html_lang = 'en'
