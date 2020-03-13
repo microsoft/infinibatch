@@ -155,7 +155,7 @@ we name these factory function using CamelCase instead of the more pythonic use_
 
 .. todo::
     We currently also have one factory function that actually looks like one: `create_source_iterator`.
-    Describe this or change it.
+    Provide a comment on this describing why that is.
 
 
 ## Source Iterators
