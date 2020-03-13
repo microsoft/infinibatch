@@ -1,4 +1,14 @@
 """
+.. todo::
+    Add a QuickStart guide including:
+
+    - Describe what the data format is (blocks of gz-files) and how to prepare them (shell commands)
+    - Give an example of how to use the dataset iterator
+    - Refer to stuff below for more documentation
+    - Refer to more realistic example below
+    - maybe this should go in the Infinibatch package documentation and not here ...
+
+
 # Overview
 
 Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
@@ -7,6 +17,24 @@ In this section, we give an introduction to these features and the basic usage o
 
 
 ## Iterators
+
+As a Python programmer, you are probably familiar with the concept of iterators.
+According to the [Python documentation](https://docs.python.org/3.5/glossary.html#term-iterator),
+an iterator is an object representing a stream of data,
+and repeated calls to the iterator's `__next__()` method (or passing it to the built-in function `next()`)
+return successive items in the stream.
+It is important not to confuse an [iterator](https://docs.python.org/3.5/glossary.html#term-iterator)
+with an [iterable](https://docs.python.org/3.5/glossary.html#term-iterable).
+For more information on this subject, please follow the links above.
+
+The Python standard library contains a module of iterators called `itertool`
+that bears some resembles to Infinibatch.
+Infinibatch differs from `itertools` in two ways:
+
+1. Infinibatch provides iterators specifically for the purpose of creating __randomized batches of data for machine learning__.
+2. All iterators in Infinibatch support __checkpointing__ (see the following section).
+
+Infinibatch iterators are not directly compatible with itertools due to the checkpointing requirement.
 
 Infinibatch enables you to build complex data loaders by combining iterators from this module into a pipeline.
 We demonstrate this with an easy (but artificial) example.
