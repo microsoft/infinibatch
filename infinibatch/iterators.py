@@ -157,9 +157,6 @@ we name these factory function using CamelCase instead of the more pythonic use_
 
 There are three iterators that are intended to go at the __beginning__ of a data loading pipeline:
 
-- `NativeCheckpointableIterator`:
-This iterator wraps a Python iterable and makes it checkpointable.
-It is mainly intended for demonstration and debugging purproses.
 - `InfinitePermutationSourceIterator`:
 This iterator accepts a list, shuffles it, and yields its elements.
 It repeats this infinitely, shuffling the list after each pass.
@@ -168,8 +165,11 @@ This iterator is meant to be used as the first iterator in a training scenario
 and supports splitting the data for multi-GPU training.
 - `ChunkedSourceIterator`:
 This iterator accepts a list and yields its elements.
-It is meant to be used as the first iterator in an inference of validation scenario
+It is meant to be used as the first iterator in an inference or validation scenario
 and supports splitting the data for mult-GPU inference.
+- `NativeCheckpointableIterator`:
+This iterator wraps a Python iterable and makes it checkpointable.
+It is mainly intended for demonstration and debugging purposes.
 
 
 ## Shuffling
@@ -244,12 +244,6 @@ class CheckpointableIterator(collections.abc.Iterator):
     def __iter__(self):
         return self
 
-    def __getstate__(self) -> Dict:  # implementation of pickle Protocol
-        return self.getstate()
-
-    def __setstate__(self, checkpoint: Optional[Dict]):
-        self.setstate(checkpoint)
-
     @abstractmethod
     def getstate(self) -> Dict:
         """
@@ -259,6 +253,9 @@ class CheckpointableIterator(collections.abc.Iterator):
         and includes the gathered information in the returned checkpoint.
         Thereby, to obtain a checkpoint of the state of an entire pipeline of iterators
         you only have to call this function on the __last__ iterator in the pipeline.
+        A checkpoint is represented as a `dict`,
+        but the caller should treat a checkpoint as an opaque object
+        and not make any assumptions about the existence or meaning of the `dict` entries.
         """
         pass
 
@@ -278,6 +275,12 @@ class CheckpointableIterator(collections.abc.Iterator):
         """
         pass
 
+    def __getstate__(self) -> Dict:  # implementation of pickle Protocol
+        return self.getstate()
+
+    def __setstate__(self, checkpoint: Optional[Dict]):
+        self.setstate(checkpoint)
+
     @abstractmethod
     def __next__(self):
         pass
@@ -287,7 +290,8 @@ class NativeCheckpointableIterator(CheckpointableIterator):
     """
     Simple wrapper class that turns a Python Iterable into a CheckpointableIterator
     
-    When calling setstate on this class, it simply replays the iterator all the way to the checkpoint one element at a time, which can make it inefficient for some use-cases.
+    When calling setstate on this class, it simply replays the iterator all the way to the checkpoint one element at a time,
+    which makes it generally inefficient.
 
     Warning: This class cannot be used with Iterators (as opposed to Iterables), which have an `__iter__` function that simply returns self, but does not reset.
     """

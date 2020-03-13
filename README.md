@@ -1,10 +1,6 @@
 # InfiniBatch
 
-## Documentation
-
 To view the documentation, please clone the repository and go to docs/infinibatch/index.html
-
-## Contribution
 
 To run unit tests, run the following command.
 ```
