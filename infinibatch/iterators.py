@@ -27,7 +27,7 @@ It is important not to confuse an [iterator](https://docs.python.org/3.5/glossar
 with an [iterable](https://docs.python.org/3.5/glossary.html#term-iterable).
 For more information on this subject, please follow the links above.
 
-The Python standard library contains a module of iterators called `itertool`
+The Python standard library contains a module of iterators called `itertools`
 that bears some resembles to Infinibatch.
 Infinibatch differs from `itertools` in two ways:
 
