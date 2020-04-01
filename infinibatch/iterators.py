@@ -9,14 +9,14 @@
     - maybe this should go in the Infinibatch package documentation and not here ...
 
 
-# Overview
+## Overview
 
 Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
 and built-in support for __checkpointing__.
 In this section, we give an introduction to these features and the basic usage of the Infinibatch iterator library.
 
 
-## Iterators
+### Iterators
 
 As a Python programmer, you are probably familiar with the concept of iterators.
 According to the [Python documentation](https://docs.python.org/3.5/glossary.html#term-iterator),
@@ -27,7 +27,7 @@ It is important not to confuse an [iterator](https://docs.python.org/3.5/glossar
 with an [iterable](https://docs.python.org/3.5/glossary.html#term-iterable).
 For more information on this subject, please follow the links above.
 
-The Python standard library contains a module of iterators called `itertool`
+The Python standard library contains a module of iterators called `itertools`
 that bears some resembles to Infinibatch.
 Infinibatch differs from `itertools` in two ways:
 
@@ -76,7 +76,7 @@ When used correctly, this allows Infinibatch to have a low start-up time and low
 For more detail on this, please consult the section on performance considerations below.
 
 
-## Checkpointing
+### Checkpointing
 
 The main features that sets Infinibatch iterators apart from standard Python iterators is that they support __checkpointing__.
 A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a data set.
@@ -139,12 +139,12 @@ Thereby, we expect the next element to be `6`.
 6
 
 
-# Types of Iterators
+## Types of Iterators
 
 This section provides a brief overview of the different types of iterators in Infinibatch.
 
 
-## Classes and Factory Functions
+### Classes and Factory Functions
 
 Most iterators in this module are implemented as classes that inherit from the abstract base class `CheckpointableIterator`.
 However, some iterators (such as the `BlockwiseShuffleIterator`) are simple combinations of other iterators.
@@ -158,7 +158,7 @@ we name these factory function using CamelCase instead of the more pythonic use_
     Provide a comment on this describing why that is.
 
 
-## Source Iterators
+### Source Iterators
 
 There are three iterators that are intended to go at the __beginning__ of a data loading pipeline:
 
@@ -177,27 +177,27 @@ This iterator wraps a Python iterable and makes it checkpointable.
 It is mainly intended for demonstration and debugging purposes.
 
 
-## Shuffling
+### Shuffling
 
 .. todo:: Describe `BufferedShuffleIterator` and `BlockwiseShuffleIterator`.
 
 
-## Batching, SelectMany, and Windowing
+### Batching, SelectMany, and Windowing
 
 .. todo:: Describe `FixedBatchIterator`, `SelectManyIterator`, and `WindowedIterator`.
 
 
-## Mapping
+### Mapping
 
 .. todo:: Describe `MapIterator`, `ParallelMapIterator`, `RecurrentIterator`, and `SamplingRandomMapIterator`.
 
 
-## Other Iterators
+### Other Iterators
 
 .. todo:: Describe `ZipIterator`, `PrefetchIterator`, and `BucketedReadaheadBatchIterator`.
 
 
-# A More Realistic Example
+## Complete Example
 
 .. todo::
     Give a more realistic example following, in broad strokes, the ChunkedDataset including:
@@ -208,7 +208,7 @@ It is mainly intended for demonstration and debugging purposes.
     - pipeline that can do both
     - etc.
 
-# Performance Considerations
+## Performance Considerations
 
 .. todo::
     Describe what parameters influence performance measures such as memory usage and start-up time.
