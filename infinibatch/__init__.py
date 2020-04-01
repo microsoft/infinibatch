@@ -2,7 +2,7 @@
 Infinibatch is a library of checkpointable iterators for randomized data loading of massive data sets in deep neural network training.
 
 
-# Features
+## Features
 
   * support for corpora much larger than fit into RAM
   * hierarchical block+sentence-level randomization over the whole corpus, different randomization in each epoch
@@ -16,65 +16,70 @@ Infinibatch is a library of checkpointable iterators for randomized data loading
   * composable, as to support for complex batching, e.g. negative samples from multiple documents
 
 
-# Getting Started
+## Getting Started
 
-To install `infinibatch`, please copy this library into a subfolder in your project:
-```
+Infinibatch requires Python 3.5 and has no dependencies.
+There is presently no pip package.
+To install it, please copy this library into a subfolder in your project:
+```bash
 cd YOUR_PROJECT_FOLDER
 git clone https://msasg.visualstudio.com/DefaultCollection/SDRG/_git/infinibatch
 ```
 or, better, as a submodule reference:
-```
+```bash
 git submodule add https://msasg.visualstudio.com/DefaultCollection/SDRG/_git/infinibatch
 ```
 It is now located at `infinibatch/infinibatch`, e.g. the main import file is `infinibatch/infinibatch/__init__.py`.
 
 To import it, you need to add that folder to your `PYTHONPATH` variable externally, or to `sys.path` inside the code:
-```
+```python
 import sys
 sys.path.insert(0,'infinibatch')  # note: relative paths are relative to your current dir, not to the python script
 import infinibatch
 ```
-There are no further dependencies. Infinibatch requires Python 3.6 or higher.
 
-# Tutorial
+## Tutorial
 
-This little tutorial walks through the steps of preparing your data and consuming them from Python code as batches.
+This little tutorial walks you through the steps of preparing your data and consuming them from Python code as batches.
 
-## Infinibatch Basics: Iterators and Checkpointing
+### Infinibatch Basics: Iterators and Checkpointing
 
 Infinibatch provides [Python iterators](https://docs.python.org/3.5/glossary.html#term-iterator)
 to read your data.
 An iterator represents a stream of data that can be retrieved item by item, e.g. via a
-`for` loop or repeated calls to the iterator's `__next__()` method.
-An item can be, for example, a pair of lines of text, or an audio file
-with a textual annotation.
+`for` loop or repeatedly calling `next()` on it.
 
-Infinibatch makes it easy to read your data in randomized order, with checkpointing.
+Infinibatch is agnostic to the data type of the items, which is determined by a user-supplied file-read function.
+In NLP applications, items would typically be tuples of text. In other applications,
+they can be images or an audio file with a textual annotation.
 
-Randomization is _on the fly_, which means that you don't need to read the entire data set into memory
+Infinibatch makes it easy to read your data in randomized order, and supports checkpointing, which allows you to restart training exactly where you left off.
+
+Randomization is done _on the fly_, which means that it is not necessary to read the entire data set into memory
 to be shuffled. Infinibatch implements a hierarchical shuffling algorithm
 that only holds a subset of the data in RAM at any point in time.
 
-Infinibatch iterators are _checkpointable_. The sad reaslity is that long-running trainings occasionally crash.
+Infinibatch iterators are _checkpointable_.
 Checkpointing lets you retrieve the current position (the "checkpoint") in the data stream at any time, so that
 later, you can "rewind" to that same position.
-If you save your Infinibatch iterator's checkpoint to disk whenever you save an intermediate model during training,
-then if your training crashes, you can load the checkpoint and continue your training
-on exactly the same data-item sequence you would have trained on without the crash.
+The sad reality is that long-running trainings occasionally crash.
+To be able to continue a crashed training as if it had not crashed,
+save your Infinibatch iterator's checkpoint to disk whenever you save an intermediate model during training.
+To restart a crashed training, reset the iterator to the saved checkpoint.
+The data reader will now yield the exact same data-item sequence it would have yielded without the crash.
 
-## Data Preparation
+### Data Preparation
 
 Infinibatch has one requirement on your data organization:
-To use your data with Infnibatch, it must be split into a large number of small chunks.
-A chunk is the smallest unit that is loaded from disk. Infinibatch holds a random subset of chunks in memory
+To use your data with Infinibatch, it must be split into a large number of small chunks.
+A chunk is the smallest unit of data that is loaded from disk into RAM. Infinibatch holds a random subset of chunks in memory
 that it randomly draws samples from.
 
-We will show how such split can be created An easy way to split your data into chunks is with the Linux `split` command.
+Below we want to show how such a split can be created. An easy way to split your data into chunks is with the Linux `split` command.
 
-Let us create a simple test file first, which will act as the corpus in this tutorial.
-In a bash shell, please run this command:
-```
+In this tutorial, our "corpus" consists of 6 lines of text, where each line is one data item.
+To create that corpus, please run this command in a bash shell. It creates a 6-line text file named `corpus.txt`:
+```bash
 echo \\
 'Lorem ipsum dolor sit amet,
 consectetur adipiscing elit,
@@ -84,37 +89,44 @@ Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
 The quick brown fox jumps over the lazy dog.' \\
 > corpus.txt
 ```
-Now let us split it into 3 chunks of 2 lines each, which is zipped. We will create them inside a
-new subdirectory called `corpus_chunks`:
-```
+Now let us split it into 3 chunks of 2 lines each. Each chunk is stored as a zipped text file.
+We will create them inside a new subdirectory called `corpus_chunks`:
+```bash
 mkdir corpus_chunks
-split  --lines 2  --numeric-suffixes  --filter 'gzip > corpus_chunks/$FILE.txt.gz'  corpus.txt  corpus.
+split  --lines 2  --numeric-suffixes                 \\
+       --filter 'gzip > corpus_chunks/$FILE.txt.gz'  \\
+       corpus.txt  corpus.
 ```
 This will have created three files: `corpus_chunks/corpus.00.txt.gz`, `corpus_chunks/corpus.01.txt.gz`, and `corpus_chunks/corpus.02.txt.gz`.
-To verify whether the data has been split as expected, you can use this command: `zcat corpus_chunks/corpus.*.txt.gz`.
-
-Hint: For large corpora, we recommend replacing `gzip` by `pigz`, which runs notably faster via multi-threading.
-
-## Reading items in random order with Infinibatch
-
-We will first show the easiest way to read data with Infinibatch, using a helper function `chunked_dataset_iterator()`.
-This function will create an Infinibatch iterator that yields the content of your data in random order.
-If you run the following program:
+To verify whether the data has been split as expected, you can use this command:
+```bash
+zcat corpus_chunks/corpus.*.txt.gz
 ```
+
+Hint: For large corpora, we recommend replacing `gzip` by `pigz` (`apt-get install pigz`), which runs notably faster via multi-threading.
+
+### Reading Items in Random Order With Infinibatch
+
+We will first show the easiest way to read data with Infinibatch, using the helper function `chunked_dataset_iterator``()`.
+This function will create an Infinibatch iterator that yields the content of your data in random order.
+Please the following program:
+```python
 import sys, gzip, glob
 sys.path.insert(0,'infinibatch')
 from infinibatch import datasets as ds
 
 ds = ds.chunked_dataset_iterator(
     chunk_refs = glob.glob('corpus_chunks/corpus.*.txt.gz'),
-    read_chunk_fn = lambda path: iter(gzip.decompress(open(path, "rb").read()).decode(encoding='utf-8').splitlines()),
+    read_chunk_fn = lambda path: iter(gzip.decompress(open(path, "rb")  \\
+                                      .read()).decode(encoding='utf-8') \\
+                                      .splitlines()),
     buffer_size = 6, seed = 1)
 
 for i in range(10):
     print(next(ds))
 ```
-you should get output that contains the 6 example lines in randomized order:
-```
+You should get output that contains the 6 example lines in randomized order:
+```text
 Lorem ipsum dolor sit amet,
 consectetur adipiscing elit,
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
@@ -127,20 +139,31 @@ The quick brown fox jumps over the lazy dog.
 sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 ```
 Note: The `buffer_size` parameter determines how many sentences are read into memory at any given time,
-for being randomized. In real settings with corpora of hundreds of millions of text lines,
+to draw randomized items from. In real settings with corpora of hundreds of millions of text lines,
 the `buffer_size` parameter should be set in the millions.
+RAM usage and startup time will be proportional to the buffer size
+(but much lower than having to load the entire corpus into RAM).
 
-## Reading items of different lengths in batches
+### Reading Items of Different Lengths in Batches
 
 For deep learning, we want to group multiple items into batches.
-For text tasks, items are often of different lengths.
+For NLP tasks, items are often lines of text of varying length.
 Infinibatch implements an algorithm that randomizes the input sequence and groups it into
-batches of approximately the same length.
+batches of approximately the same length (aka _bucketing_).
 
-Infinibatch's `BucketedReadaheadBatchIterator()` performs this task.
-Here is an example. Please note that `BucketedReadaheadBatchIterator()` takes the previous
-randomized sentence sequence iterator in `ds` as an argument.
-```
+Infinibatch's `BucketedReadaheadBatchIterator` performs this task.
+It implements an algorithm modeled after the [Marian toolkit](https://github.com/marian-nmt/marian)
+that preloads a large number of randomized items (typically millions; in this example: 6),
+sorts them and groups them into batches of similar length, and then yields
+them, in turn, in randomized order.
+
+Here is an example. Note that the `BucketedReadaheadBatchIterator` accepts
+the previous randomized sentence sequence iterator (`ds`) as the source of items to randomize over.
+This is an example how one forms pipelines of iterators with Infinibatch
+(a concept familiar from Python's own `itertools`).
+Once an iterator is passed to another as its source, consider it owned by that other iterator,
+it must no longer be accessed by the calling code.
+```python
 import sys, gzip, glob
 sys.path.insert(0,'infinibatch')
 from infinibatch import datasets as ds
@@ -148,11 +171,13 @@ from infinibatch import iterators as it
 
 ds = ds.chunked_dataset_iterator(
     chunk_refs = glob.glob('corpus_chunks/corpus.*.txt.gz'),
-    read_chunk_fn = lambda path: iter(gzip.decompress(open(path, "rb").read()).decode(encoding='utf-8').splitlines()),
+    read_chunk_fn = lambda path: iter(gzip.decompress(open(path, "rb")  \\
+                                      .read()).decode(encoding='utf-8') \\
+                                      .splitlines()),
     buffer_size = 6, seed = 1)
 
 bs = it.BucketedReadaheadBatchIterator(
-    source_iterator = ds,
+    source_iterator = ds,   # note: this is the iterator from above
     read_ahead = 6,
     key = lambda line: len(line),
     batch_size = 2,
@@ -162,42 +187,64 @@ for i in range(25):
     print(next(bs))
 ```
 This code should output something like this:
-```
-['sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.', 'The quick brown fox jumps over the lazy dog.']
+```python
+['sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+ 'The quick brown fox jumps over the lazy dog.']
 ['consectetur adipiscing elit,', 'Lorem ipsum dolor sit amet,']
-['Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.', 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.']
+['Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+ 'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.']
 ```
 followed by different permutations of the same tuples.
 As you can see, the sentences are in random order and grouped in batches of 2 of approximately the same length.
-In this examples, all permutations have the same batch groupings. In real examples, where the data size is much larger
-than the batch size, this will not be the case.
+You may notice that there is no variation in how the items get grouped into batches--that
+is an artifact of this example, and generally not the case in real use when the data size is much larger
+than the batch size.
 
-Infinibatch can also help batching variable-size batches. Please change the `batch_size` parameter to a lambda
-that determines the number of items as a function of the length of the longest item in a batch:
-```
-    batch_size = lambda line: 150 // len(line),
+In NLP, sentence length often varies considerably. As a result, using batches of a fixed number of lines,
+as in the example above, will waste GPU RAM and cores.
+This is because the number of lines is limited by the longest possible sequence; batches of shorter lines
+would leave GPU cycles on the table.
+Ideally, one would use batches that have as many lines as fit into GPU RAM,
+given the number of tokens of the longest line in the batch.
+To support variable batch sizes, Infinibatch allows to pass a function as the `batch_size` parameter.
+That function will be given the longest item of a batch and should estimate how many items of at most this length can fit.
+
+In our example, we assume that batches can hold at most 150 tokens.
+Please change the above code as follows:
+```python
+    batch_size = lambda longest_line: 150 // len(longest_line),
 ```
 The output looks like this:
 ```
 ['consectetur adipiscing elit,', 'Lorem ipsum dolor sit amet,']
 ['Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.']
-['sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.', 'The quick brown fox jumps over the lazy dog.']
+['sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+ 'The quick brown fox jumps over the lazy dog.']
 ['Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.']
 ```
-That shorter sentences got grouped, while longer did not because they would exceed the total of 150.
+That shorter sentences got grouped, while longer did not because they would exceed the total of 150 characters.
 
-## Reading batches into numpy arrays
+### Reading Batches Into Numpy Arrays
 
 Lastly, we will need to feed batches into our favorite deep-learning tool.
-The following code converts the input lines of each batch into a sequence
-of character ASCII codes (a real scenario would have word indices here).
+We will show how to convert the batches of text lines into padded `numpy` arrays.
+
+In a typical NLP application, text items would be tokenized, and then each token
+would be represented by an index into a unit vocabulary.
+For simplicity, in this example each character is its own token,
+and each token's numeric unit index is just its ASCII code.
 These sequences are then padded to equal length with -1, and converted into a `numpy` array.
 
-Please rerun the previous example, but first insert the following code before the final `for` loop:
-```
+Please rerun the previous example, but first insert the following code before the final `for` loop.
+This example uses an Infinibatch `MapIterator`, which applies a user-supplied function or
+lambda to each item:
+```python
 import numpy as np
 def collate(lines_batch):
+    # tokenize all lines in the batch and map to unit ids
     ids_batch = [[ord(c) for c in line] for line in lines_batch]
+    # create a padded numpy array as wide as the longest line,
+    # where shorter sequences are padded with -1
     width = max(len(ids) for ids in ids_batch)
     return np.array([ids + [-1] * (width-len(ids)) for ids in ids_batch])
 
@@ -207,7 +254,7 @@ bs = it.MapIterator(
 ```
 This will output batches like this. Note that in batches with multiple sentences,
 some entries are padded with `-1`.
-```
+```python
 [[ 99 111 110 115 101  99 116 101 116 117 114  32  97 100 105 112 105 115
    99 105 110 103  32 101 108 105 116  44]
  [ 76 111 114 101 109  32 105 112 115 117 109  32 100 111 108 111 114  32
@@ -234,7 +281,7 @@ some entries are padded with `-1`.
   108  97  32 112  97 114 105  97 116 117 114  46]]
 ```
 
-# Where To Go From Here
+## Where To Go From Here
 
 The above tutorial showed you the use of the most common iterator type, as created by the
 convenience function `chunked_dataset_iterator()`.
