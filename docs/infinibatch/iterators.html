@@ -32,11 +32,11 @@ Add a QuickStart guide including: …" />
 <li>maybe this should go in the Infinibatch package documentation and not here &hellip;</li>
 </ul>
 </div>
-<h1 id="overview">Overview</h1>
+<h2 id="overview">Overview</h2>
 <p>Two of the main features of Infinibatch are <strong>lazy evaluation</strong> through the use of <strong>iterators</strong>
 and built-in support for <strong>checkpointing</strong>.
 In this section, we give an introduction to these features and the basic usage of the Infinibatch iterator library.</p>
-<h2 id="iterators">Iterators</h2>
+<h3 id="iterators">Iterators</h3>
 <p>As a Python programmer, you are probably familiar with the concept of iterators.
 According to the <a href="https://docs.python.org/3.5/glossary.html#term-iterator">Python documentation</a>,
 an iterator is an object representing a stream of data,
@@ -88,7 +88,7 @@ It generally doesn't apply operations to an entire data set at once,
 but rather operates on individual data items on-the-fly as they are consumed.
 When used correctly, this allows Infinibatch to have a low start-up time and low memory overhead.
 For more detail on this, please consult the section on performance considerations below.</p>
-<h2 id="checkpointing">Checkpointing</h2>
+<h3 id="checkpointing">Checkpointing</h3>
 <p>The main features that sets Infinibatch iterators apart from standard Python iterators is that they support <strong>checkpointing</strong>.
 A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a data set.
 Once you retrieve a checkpoint, you can later use it to reset the pipeline of iterators to the exact state it was in
@@ -143,9 +143,9 @@ Thereby, we expect the next element to be <code>6</code>.</p>
 <pre><code>&gt;&gt;&gt; next(it)
 6
 </code></pre>
-<h1 id="types-of-iterators">Types of Iterators</h1>
+<h2 id="types-of-iterators">Types of Iterators</h2>
 <p>This section provides a brief overview of the different types of iterators in Infinibatch.</p>
-<h2 id="classes-and-factory-functions">Classes and Factory Functions</h2>
+<h3 id="classes-and-factory-functions">Classes and Factory Functions</h3>
 <p>Most iterators in this module are implemented as classes that inherit from the abstract base class <a title="infinibatch.iterators.CheckpointableIterator" href="#infinibatch.iterators.CheckpointableIterator"><code>CheckpointableIterator</code></a>.
 However, some iterators (such as the <a title="infinibatch.iterators.BlockwiseShuffleIterator" href="#infinibatch.iterators.BlockwiseShuffleIterator"><code>BlockwiseShuffleIterator()</code></a>) are simple combinations of other iterators.
 These iterators are implemented as <strong>factory functions</strong> that construct a pipeline of iterators
@@ -157,7 +157,7 @@ we name these factory function using CamelCase instead of the more pythonic use_
 <p>We currently also have one factory function that actually looks like one: <a title="infinibatch.iterators.create_source_iterator" href="#infinibatch.iterators.create_source_iterator"><code>create_source_iterator()</code></a>.
 Provide a comment on this describing why that is.</p>
 </div>
-<h2 id="source-iterators">Source Iterators</h2>
+<h3 id="source-iterators">Source Iterators</h3>
 <p>There are three iterators that are intended to go at the <strong>beginning</strong> of a data loading pipeline:</p>
 <ul>
 <li><a title="infinibatch.iterators.InfinitePermutationSourceIterator" href="#infinibatch.iterators.InfinitePermutationSourceIterator"><code>InfinitePermutationSourceIterator</code></a>:
@@ -174,27 +174,27 @@ and supports splitting the data for mult-GPU inference.</li>
 This iterator wraps a Python iterable and makes it checkpointable.
 It is mainly intended for demonstration and debugging purposes.</li>
 </ul>
-<h2 id="shuffling">Shuffling</h2>
+<h3 id="shuffling">Shuffling</h3>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
 <p>Describe <a title="infinibatch.iterators.BufferedShuffleIterator" href="#infinibatch.iterators.BufferedShuffleIterator"><code>BufferedShuffleIterator</code></a> and <a title="infinibatch.iterators.BlockwiseShuffleIterator" href="#infinibatch.iterators.BlockwiseShuffleIterator"><code>BlockwiseShuffleIterator()</code></a>.</p>
 </div>
-<h2 id="batching-selectmany-and-windowing">Batching, SelectMany, and Windowing</h2>
+<h3 id="batching-selectmany-and-windowing">Batching, SelectMany, and Windowing</h3>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
 <p>Describe <a title="infinibatch.iterators.FixedBatchIterator" href="#infinibatch.iterators.FixedBatchIterator"><code>FixedBatchIterator</code></a>, <a title="infinibatch.iterators.SelectManyIterator" href="#infinibatch.iterators.SelectManyIterator"><code>SelectManyIterator</code></a>, and <a title="infinibatch.iterators.WindowedIterator" href="#infinibatch.iterators.WindowedIterator"><code>WindowedIterator</code></a>.</p>
 </div>
-<h2 id="mapping">Mapping</h2>
+<h3 id="mapping">Mapping</h3>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
 <p>Describe <a title="infinibatch.iterators.MapIterator" href="#infinibatch.iterators.MapIterator"><code>MapIterator</code></a>, <a title="infinibatch.iterators.ParallelMapIterator" href="#infinibatch.iterators.ParallelMapIterator"><code>ParallelMapIterator()</code></a>, <a title="infinibatch.iterators.RecurrentIterator" href="#infinibatch.iterators.RecurrentIterator"><code>RecurrentIterator</code></a>, and <a title="infinibatch.iterators.SamplingRandomMapIterator" href="#infinibatch.iterators.SamplingRandomMapIterator"><code>SamplingRandomMapIterator()</code></a>.</p>
 </div>
-<h2 id="other-iterators">Other Iterators</h2>
+<h3 id="other-iterators">Other Iterators</h3>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
 <p>Describe <a title="infinibatch.iterators.ZipIterator" href="#infinibatch.iterators.ZipIterator"><code>ZipIterator</code></a>, <a title="infinibatch.iterators.PrefetchIterator" href="#infinibatch.iterators.PrefetchIterator"><code>PrefetchIterator</code></a>, and <a title="infinibatch.iterators.BucketedReadaheadBatchIterator" href="#infinibatch.iterators.BucketedReadaheadBatchIterator"><code>BucketedReadaheadBatchIterator</code></a>.</p>
 </div>
-<h1 id="a-more-realistic-example">A More Realistic Example</h1>
+<h2 id="complete-example">Complete Example</h2>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
 <p>Give a more realistic example following, in broad strokes, the ChunkedDataset including:</p>
@@ -206,7 +206,7 @@ It is mainly intended for demonstration and debugging purposes.</li>
 <li>etc.</li>
 </ul>
 </div>
-<h1 id="performance-considerations">Performance Considerations</h1>
+<h2 id="performance-considerations">Performance Considerations</h2>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
 <p>Describe what parameters influence performance measures such as memory usage and start-up time.</p>
@@ -226,14 +226,14 @@ It is mainly intended for demonstration and debugging purposes.</li>
     - maybe this should go in the Infinibatch package documentation and not here ...
 
 
-# Overview
+## Overview
 
 Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
 and built-in support for __checkpointing__.
 In this section, we give an introduction to these features and the basic usage of the Infinibatch iterator library.
 
 
-## Iterators
+### Iterators
 
 As a Python programmer, you are probably familiar with the concept of iterators.
 According to the [Python documentation](https://docs.python.org/3.5/glossary.html#term-iterator),
@@ -293,7 +293,7 @@ When used correctly, this allows Infinibatch to have a low start-up time and low
 For more detail on this, please consult the section on performance considerations below.
 
 
-## Checkpointing
+### Checkpointing
 
 The main features that sets Infinibatch iterators apart from standard Python iterators is that they support __checkpointing__.
 A checkpoint encapsulates the internal state of an entire pipeline of iterators at a specific point while iterating through a data set.
@@ -356,12 +356,12 @@ Thereby, we expect the next element to be `6`.
 6
 
 
-# Types of Iterators
+## Types of Iterators
 
 This section provides a brief overview of the different types of iterators in Infinibatch.
 
 
-## Classes and Factory Functions
+### Classes and Factory Functions
 
 Most iterators in this module are implemented as classes that inherit from the abstract base class `CheckpointableIterator`.
 However, some iterators (such as the `BlockwiseShuffleIterator`) are simple combinations of other iterators.
@@ -375,7 +375,7 @@ we name these factory function using CamelCase instead of the more pythonic use_
     Provide a comment on this describing why that is.
 
 
-## Source Iterators
+### Source Iterators
 
 There are three iterators that are intended to go at the __beginning__ of a data loading pipeline:
 
@@ -394,27 +394,27 @@ This iterator wraps a Python iterable and makes it checkpointable.
 It is mainly intended for demonstration and debugging purposes.
 
 
-## Shuffling
+### Shuffling
 
 .. todo:: Describe `BufferedShuffleIterator` and `BlockwiseShuffleIterator`.
 
 
-## Batching, SelectMany, and Windowing
+### Batching, SelectMany, and Windowing
 
 .. todo:: Describe `FixedBatchIterator`, `SelectManyIterator`, and `WindowedIterator`.
 
 
-## Mapping
+### Mapping
 
 .. todo:: Describe `MapIterator`, `ParallelMapIterator`, `RecurrentIterator`, and `SamplingRandomMapIterator`.
 
 
-## Other Iterators
+### Other Iterators
 
 .. todo:: Describe `ZipIterator`, `PrefetchIterator`, and `BucketedReadaheadBatchIterator`.
 
 
-# A More Realistic Example
+## Complete Example
 
 .. todo::
     Give a more realistic example following, in broad strokes, the ChunkedDataset including:
@@ -425,7 +425,7 @@ It is mainly intended for demonstration and debugging purposes.
     - pipeline that can do both
     - etc.
 
-# Performance Considerations
+## Performance Considerations
 
 .. todo::
     Describe what parameters influence performance measures such as memory usage and start-up time.
@@ -2635,7 +2635,7 @@ is dynamic, and determined by a user-provided callback.</p>
 <li><a href="#other-iterators">Other Iterators</a></li>
 </ul>
 </li>
-<li><a href="#a-more-realistic-example">A More Realistic Example</a></li>
+<li><a href="#complete-example">Complete Example</a></li>
 <li><a href="#performance-considerations">Performance Considerations</a></li>
 </ul>
 </div>
