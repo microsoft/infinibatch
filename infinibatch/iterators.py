@@ -1,15 +1,8 @@
 """
-.. todo::
-    Add a QuickStart guide including:
-
-    - Describe what the data format is (blocks of gz-files) and how to prepare them (shell commands)
-    - Give an example of how to use the dataset iterator
-    - Refer to stuff below for more documentation
-    - Refer to more realistic example below
-    - maybe this should go in the Infinibatch package documentation and not here ...
-
-
 ## Overview
+
+This part of the documentation covers the __advanced usage__ of Infinibatch by assembling __custom data loading pipelines__.
+Before you continue, please go through the tutorial on the top-level of the documentation of the `infinibatch` module.
 
 Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
 and built-in support for __checkpointing__.
@@ -46,7 +39,7 @@ First, we create a small test data set.
 >>> dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 
 We can turn this data set into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
->>> it = NativeCheckpointableIterator(dataset) # 0, 1, 2, 3, 4, 5
+>>> it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
 
 We can then transform the data items using a `MapIterator`,
 which applies a given function to each individual data item.

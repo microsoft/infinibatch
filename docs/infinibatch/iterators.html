@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.7.5" />
 <title>infinibatch.iterators API documentation</title>
-<meta name="description" content=".. todo::
-Add a QuickStart guide including: …" />
+<meta name="description" content="Overview …" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
@@ -21,18 +20,9 @@ Add a QuickStart guide including: …" />
 <h1 class="title">Module <code>infinibatch.iterators</code></h1>
 </header>
 <section id="section-intro">
-<div class="admonition todo">
-<p class="admonition-title">TODO</p>
-<p>Add a QuickStart guide including:</p>
-<ul>
-<li>Describe what the data format is (blocks of gz-files) and how to prepare them (shell commands)</li>
-<li>Give an example of how to use the dataset iterator</li>
-<li>Refer to stuff below for more documentation</li>
-<li>Refer to more realistic example below</li>
-<li>maybe this should go in the Infinibatch package documentation and not here &hellip;</li>
-</ul>
-</div>
 <h2 id="overview">Overview</h2>
+<p>This part of the documentation covers the <strong>advanced usage</strong> of Infinibatch by assembling <strong>custom data loading pipelines</strong>.
+Before you continue, please go through the tutorial on the top-level of the documentation of the <a title="infinibatch" href="index.html"><code>infinibatch</code></a> module.</p>
 <p>Two of the main features of Infinibatch are <strong>lazy evaluation</strong> through the use of <strong>iterators</strong>
 and built-in support for <strong>checkpointing</strong>.
 In this section, we give an introduction to these features and the basic usage of the Infinibatch iterator library.</p>
@@ -62,7 +52,7 @@ We provide a more realistic example in a later section.</p>
 <pre><code>&gt;&gt;&gt; dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 </code></pre>
 <p>We can turn this data set into an Infinibatch iterator by wrapping it in a <a title="infinibatch.iterators.NativeCheckpointableIterator" href="#infinibatch.iterators.NativeCheckpointableIterator"><code>NativeCheckpointableIterator</code></a>.</p>
-<pre><code>&gt;&gt;&gt; it = NativeCheckpointableIterator(dataset) # 0, 1, 2, 3, 4, 5
+<pre><code>&gt;&gt;&gt; it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
 </code></pre>
 <p>We can then transform the data items using a <a title="infinibatch.iterators.MapIterator" href="#infinibatch.iterators.MapIterator"><code>MapIterator</code></a>,
 which applies a given function to each individual data item.
@@ -216,17 +206,10 @@ It is mainly intended for demonstration and debugging purposes.</li>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">&#34;&#34;&#34;
-.. todo::
-    Add a QuickStart guide including:
-
-    - Describe what the data format is (blocks of gz-files) and how to prepare them (shell commands)
-    - Give an example of how to use the dataset iterator
-    - Refer to stuff below for more documentation
-    - Refer to more realistic example below
-    - maybe this should go in the Infinibatch package documentation and not here ...
-
-
 ## Overview
+
+This part of the documentation covers the __advanced usage__ of Infinibatch by assembling __custom data loading pipelines__.
+Before you continue, please go through the tutorial on the top-level of the documentation of the `infinibatch` module.
 
 Two of the main features of Infinibatch are __lazy evaluation__ through the use of __iterators__
 and built-in support for __checkpointing__.
@@ -263,7 +246,7 @@ First, we create a small test data set.
 &gt;&gt;&gt; dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 
 We can turn this data set into an Infinibatch iterator by wrapping it in a `NativeCheckpointableIterator`.
-&gt;&gt;&gt; it = NativeCheckpointableIterator(dataset) # 0, 1, 2, 3, 4, 5
+&gt;&gt;&gt; it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
 
 We can then transform the data items using a `MapIterator`,
 which applies a given function to each individual data item.
