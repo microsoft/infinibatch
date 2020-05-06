@@ -985,7 +985,8 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
 
     def _create_batches(self, items: List[Any]) -> List[List[Any]]:  # helper to form batches from a list of items
             # sort by length, longest first
-            items.sort(key=self._key, reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
+            if self._key:
+                items.sort(key=self._key, reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
             # group into batches
             cur_batch = None
             batches = []
