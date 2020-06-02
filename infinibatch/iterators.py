@@ -221,7 +221,7 @@ from threading import Thread
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
 
 
-from infinibatch.closablequeue import ClosableQueue, ClosedException
+from .closablequeue import ClosableQueue, ClosedException
 
 
 # TODO for next release:
