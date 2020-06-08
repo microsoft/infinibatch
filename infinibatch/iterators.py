@@ -241,7 +241,7 @@ def _advance_iterator(iterator: Iterator, n: int):
 class CheckpointableIterator(collections.abc.Iterator):
     """
     Abstract base class that defines the interface for checkpointing.
-    
+
     The interface (getstate, setstate) is inspired by Python's random package.
     """
     def __iter__(self):
@@ -251,7 +251,7 @@ class CheckpointableIterator(collections.abc.Iterator):
     def getstate(self) -> Dict:
         """
         Get checkpoint of current state of iterator
-        
+
         In a pipeline of iterators, this function __recursively__ calls itself on the preceeding iterator
         and includes the gathered information in the returned checkpoint.
         Thereby, to obtain a checkpoint of the state of an entire pipeline of iterators
@@ -292,7 +292,7 @@ class CheckpointableIterator(collections.abc.Iterator):
 class NativeCheckpointableIterator(CheckpointableIterator):
     """
     Simple wrapper class that turns a Python Iterable into a CheckpointableIterator
-    
+
     When calling setstate on this class, it simply replays the iterator all the way to the checkpoint one element at a time,
     which makes it generally inefficient.
 
@@ -302,7 +302,7 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         # check whether iterable is iterable or iterator:
         # if the variable iterable contains an iterator, the function __iter__ returns self
         # if the variable iterable is an actual iterator, it should not return self
-        if iter(iterable) is iterable:  
+        if iter(iterable) is iterable:
             raise ValueError('It looks like you are passing an iterator instead of an iterable. This is not supported and can cause undefined behavior when used with checkpointing.')
         self._input_iterable = iterable
         self.setstate(None)
@@ -670,7 +670,7 @@ class WindowedIterator(CheckpointableIterator):
                 yield window
             # drop all we just served; if < width left, we have hit the end
             self._fifo = self._fifo[last + 1:]    # Note: This must be a new list, since the old might still be in a slice view.
-            self._source_state = next_input_state  # this reflects now the first element in the FIFO 
+            self._source_state = next_input_state  # this reflects now the first element in the FIFO
             self._item_index = 0
 
     def __next__(self):
@@ -735,7 +735,8 @@ class RandomIterator(CheckpointableIterator):
         return {'random_state': self._random.getstate()}
 
     def setstate(self, checkpoint: Optional[Dict]):
-        self._random.setstate(checkpoint['random_state'] if checkpoint else None)
+        if checkpoint is not None:
+            self._random.setstate(checkpoint['random_state'])
 
     def __next__(self):
         return self._random.random()
@@ -759,11 +760,11 @@ class RecurrentIterator(CheckpointableIterator):
         self._step_function = step_function      # type: Callable[[Any,Any], Tuple[Any,Any]]
         self._initial_state = initial_state      # type: Any
         self.setstate(None)
-    
+
     def getstate(self):
         return {'recurrent_state': self._recurrent_state,
                 'source_state':    self._source_iterator.getstate()}
-    
+
     def setstate(self, checkpoint):
         self._recurrent_state = checkpoint['recurrent_state'] if checkpoint else self._initial_state
         self._source_iterator.setstate(checkpoint['source_state'] if checkpoint else None)
@@ -838,7 +839,7 @@ class PrefetchIterator(CheckpointableIterator):
         self._queue = None                       # type: Optional[ClosableQueue]
         self._thread = None                      # type: Optional[Thread]
         self.setstate(None)
-        
+
     def getstate(self) -> Dict:
         return {'source_state': self._source_state,
                 'item_offset' : self._item_offset  }
@@ -848,7 +849,7 @@ class PrefetchIterator(CheckpointableIterator):
             assert self._queue is not None
             self._queue.close()
             self._thread.join()
-        
+
         self._source_state = checkpoint['source_state'] if checkpoint is not None else None
         self._item_offset  = checkpoint['item_offset' ] if checkpoint is not None else 0
 
@@ -869,7 +870,7 @@ class PrefetchIterator(CheckpointableIterator):
             except StopIteration:
                 queue.close()
                 return
-            
+
             if item_offset == buffer_size - 1:  # send a new source state a the END of each window of length _buffer_size
                 source_state = source.getstate()  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
                 item_offset = 0
