@@ -23,7 +23,7 @@ from infinibatch.datasets import chunked_dataset_iterator
 #  - make sure that all iterators can be reset to a checkpoint at the beginning of the iteration
 #  - refactor test cases that do not rely on TestCheckpointableIterator
 #  - make sure every iterator is tested for correct checkpointing at the end of the iterator
-
+#  - test whether iterators give same result when running from start twice (is seed reset correctly?)
 
 class TestCheckpointableIterator:
     """
