@@ -18,7 +18,7 @@ def chunked_dataset_iterator(chunk_refs: List, read_chunk_fn: Callable[[Any], It
                              train: bool=True,
                              seed: Optional[int]=None, shuffle: bool=True, use_windowed: bool=False,
                              transform: Callable[[Any],Any]=None,
-                             prefetch: bool=True,
+                             prefetch: bool=False,
                              num_instances: int=1, instance_rank: int=0):
     """
     Dataset reading data from gzipped chunks.
