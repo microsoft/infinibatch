@@ -837,7 +837,7 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int):
 
     Args:
         source_iterator: checkpointable iterator to recur over
-        buffer_size: number of items to prefetch; this is the maximum number of itemes held in the prefetch queue
+        buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
     """
     if multiprocessing.get_start_method() != 'fork':
         print('WARNING: \
@@ -856,12 +856,11 @@ class _ForkPrefetchIterator(CheckpointableIterator):
 
     Args:
         source_iterator: checkpointable iterator to recur over
-        buffer_size: number of items to prefetch; this is the maximum number of itemes held in the prefetch queue
+        buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
     """
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int):
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
-        assert multiprocessing.current_process().name == 'MainProcess', 'It appears you are using multiple PrefetchIterators in sequence. This is currently not supported.'
         self._source_iterator = source_iterator  # type:CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
         self._prefetch_process = None            # type: Process
@@ -907,7 +906,6 @@ class _ForkPrefetchIterator(CheckpointableIterator):
             queue.put(msg)
 
     def __next__(self):
-        assert multiprocessing.current_process().name == 'MainProcess', 'It appears you are using multiple PrefetchIterators in sequence. This is currently not supported.'
         if self._queue is None:  # iterator has already been exhausted
             raise StopIteration()
         msg = self._queue.get()
