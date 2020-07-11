@@ -911,7 +911,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         self._queue = Queue(maxsize=self._buffer_size)
         _prefetch_process = Process(target=self._prefetch_process_fn,
                                     args=(self._source_iterator,
-                                          self._item_offset,
+                                          self._item_offset,  # @TODO: why pass all these parameters? They are forked anyways. Seems a left-over from thread days.
                                           self._buffer_size,
                                           self._queue))
         _prefetch_process.start()  # this invokes fork()
@@ -928,7 +928,12 @@ class _ForkPrefetchIterator(CheckpointableIterator):
                 item = next(source)
             except StopIteration:
                 queue.put(StopIteration())
-                return  # this ends the pre-fetch process
+                # It seems Python Queue has a bug: if we return here, then the StopIteration message is never sent to the receiver.
+                # So we just dead-loop, assuming that the process will be killed anyways when the consuming side destructs the prefetcher.
+                import time
+                while True:
+                    time.sleep(1000)
+                return  # we never actually get here
             if item_offset == buffer_size - 1:    # for efficiency, we send a new source state only at the END of each window of length _buffer_size
                 source_state = source.getstate()  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
                 item_offset = 0
