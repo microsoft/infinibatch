@@ -213,8 +213,7 @@ import copy
 import gzip
 from itertools import cycle, islice
 import math
-import multiprocessing
-from multiprocessing import Event, Pool, Process, Queue
+import multiprocessing as python_multiprocessing
 import os
 from random import Random
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
@@ -863,15 +862,16 @@ def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size
     return samples
 
 
-def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int):
+def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, multiprocessing=None):
     """
     An iterator prefetching data into a buffer on a seperate process.
 
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
+        multiprocessing: module to get `Queue` type from. Pass torch.multiprocessing here when items are Torch tensors for optimized data transfer.
     """
-    if multiprocessing.get_start_method() != 'fork':
+    if python_multiprocessing.get_start_method() != 'fork':
         print('WARNING: \
                PrefetchIterator is only supported on operating system that use fork to create new processes.\
                This excludes Windows.\
@@ -879,7 +879,7 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int):
                This also means that checkpoints of this iterator pipeline cannot be ported to a system that uses fork.')
         return source_iterator
     else:
-        return _ForkPrefetchIterator(source_iterator, buffer_size)
+        return _ForkPrefetchIterator(source_iterator, buffer_size, multiprocessing)
 
 
 class _ForkPrefetchIterator(CheckpointableIterator):
@@ -889,12 +889,15 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
+        multiprocessing_module: use this in place of Python's multiprocessing module, to allow for using torch.multiprocessing.Queue
     """
-    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int):
+    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, multiprocessing_module):
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator  # type:CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
+        self._QueueType = multiprocessing_module.Queue if multiprocessing_module else  \
+                          python_multiprocessing.Queue
         self._prefetch_process = None            # type: Process
         self.setstate(None)
 
@@ -908,12 +911,12 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         self._source_state = checkpoint['source_state'] if checkpoint is not None else None
         self._item_offset  = checkpoint['item_offset' ] if checkpoint is not None else 0
         self._source_iterator.setstate(self._source_state)
-        self._queue = Queue(maxsize=self._buffer_size)
-        _prefetch_process = Process(target=self._prefetch_process_fn,
-                                    args=(self._source_iterator,
-                                          self._item_offset,  # @TODO: why pass all these parameters? They are forked anyways. Seems a left-over from thread days.
-                                          self._buffer_size,
-                                          self._queue))
+        self._queue = self._QueueType(maxsize=self._buffer_size)
+        _prefetch_process = python_multiprocessing.Process(target=self._prefetch_process_fn,
+                                                           args=(self._source_iterator,
+                                                                 self._item_offset,  # @TODO: why pass all these parameters? They are forked anyways. Seems a left-over from thread days.
+                                                                 self._buffer_size,
+                                                                 self._queue))
         _prefetch_process.start()  # this invokes fork()
         self._prefetch_process = _prefetch_process
         # make sure that in case of an unexpected shutdown, we still get rid of any active child process
