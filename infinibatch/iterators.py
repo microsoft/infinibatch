@@ -428,8 +428,8 @@ class MultiplexIterator(CheckpointableIterator):
     def __init__(self, control_iterator: CheckpointableIterator, source_iterators: List[CheckpointableIterator]):
         if any(not isinstance(it, CheckpointableIterator) for it in [control_iterator] + source_iterators):
             raise ValueError('control_iterator and source_iterators have to be CheckpointableIterators')
-        self._control_iterator: CheckpointableIterator = control_iterator
-        self._source_iterators: List[CheckpointableIterator] = list(source_iterators)
+        self._control_iterator = control_iterator        # type: CheckpointableIterator
+        self._source_iterators = list(source_iterators)  # type: List[CheckpointableIterator]
         self.setstate(None)
     
     def getstate(self) -> Dict:
@@ -607,7 +607,7 @@ def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Call
     # divide stream of data items into batches
     batched_samples = FixedBatchIterator(source_iterator, num_processes * num_items_per_process)
     # create process pool and capture it in closure that performs parallel map
-    p = Pool(num_processes)
+    p = python_multiprocessing.Pool(num_processes)
     def parallel_map_transform(buffer):
         return p.map(transform, buffer)
     # apply transform in parallel to data items in a batch
