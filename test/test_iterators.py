@@ -13,7 +13,7 @@ from infinibatch.iterators import create_source_iterator, ChunkedSourceIterator,
                                   NativeCheckpointableIterator, BucketedReadaheadBatchIterator, \
                                   MapIterator, ParallelMapIterator, ZipIterator, FixedBatchIterator, WindowedIterator, SelectManyIterator, \
                                   RandomIterator, RecurrentIterator, SamplingRandomMapIterator, \
-                                  PrefetchIterator
+                                  PrefetchIterator, MultiplexIterator
 from infinibatch.datasets import chunked_dataset_iterator
 
 
@@ -107,6 +107,16 @@ class TestBase(unittest.TestCase):
     def assertMultisetEqual(self, a, b):
         self.assertEqual(len(a), len(b))
         self.assertSetEqual(set(a), set(b))
+
+
+class TestMultiplexIterator(unittest.TestCase, TestCheckpointableIterator):
+    def setUp(self):
+        index_seq = [0, 2, 1, 2, 0, 1, 1]
+        data_seqs = [[0.0, 0.1, 0.2, 0.3],
+                     [1.0, 1.1, 1.2, 1.3],
+                     [2.0, 2.1, 2.2, 2.3]]
+        self.expected_result = [0.0, 2.0, 1.0, 2.1, 0.1, 1.1, 1.2]
+        self.iterator = MultiplexIterator(NativeCheckpointableIterator(index_seq), [NativeCheckpointableIterator(ds) for ds in data_seqs])
 
 
 class TestSourceIterator(unittest.TestCase):

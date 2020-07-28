@@ -1,6 +1,6 @@
 import torch
-from infinibatch.iterators import CheckpointableIterator
-from infinibatch.datasets  import chunked_dataset_iterator
+from ..iterators import CheckpointableIterator
+from ..datasets  import chunked_dataset_iterator
 from typing import Union, Iterable, Any
 
 
