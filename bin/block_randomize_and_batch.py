@@ -5,7 +5,6 @@
 #   block_randomize_and_batch my_chunked_data
 
 import os, sys, inspect
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))))  # find our imports
 
 from infinibatch.datasets import chunked_dataset_iterator
 from infinibatch.iterators import BucketedReadaheadBatchIterator
