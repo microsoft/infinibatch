@@ -96,8 +96,8 @@ We will first show the easiest way to read data with Infinibatch, using the help
 This function will create an Infinibatch iterator that yields the content of your data in random order.
 Please the following program:
 ```python
-import sys, gzip, glob
-sys.path.insert(0,'infinibatch')
+import gzip, glob
+
 from infinibatch import datasets as ds
 
 ds = ds.chunked_dataset_iterator(
@@ -149,8 +149,8 @@ This is an example how one forms pipelines of iterators with Infinibatch
 Once an iterator is passed to another as its source, consider it owned by that other iterator,
 it must no longer be accessed by the calling code.
 ```python
-import sys, gzip, glob
-sys.path.insert(0,'infinibatch')
+import gzip, glob
+
 from infinibatch import datasets as ds
 from infinibatch import iterators as it
 
