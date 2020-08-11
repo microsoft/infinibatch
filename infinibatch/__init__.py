@@ -276,3 +276,5 @@ scenarios require more complex combinations of data. To create those, you will n
 to compose the necessary data reader from the underlying building blocks.
 This is described at the documentation of the module `iterators`.
 """
+
+from .iterators import *
