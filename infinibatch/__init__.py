@@ -20,23 +20,8 @@ Infinibatch is a library of checkpointable iterators for randomized data loading
 
 Infinibatch requires Python 3.5 and has no dependencies.
 There is presently no pip package.
-To install it, please copy this library into a subfolder in your project:
-```bash
-cd YOUR_PROJECT_FOLDER
-git clone https://msasg.visualstudio.com/DefaultCollection/SDRG/_git/infinibatch
-```
-or, better, as a submodule reference:
-```bash
-git submodule add https://msasg.visualstudio.com/DefaultCollection/SDRG/_git/infinibatch
-```
-It is now located at `infinibatch/infinibatch`, e.g. the main import file is `infinibatch/infinibatch/__init__.py`.
 
-To import it, you need to add that folder to your `PYTHONPATH` variable externally, or to `sys.path` inside the code:
-```python
-import sys
-sys.path.insert(0,'infinibatch')  # note: relative paths are relative to your current dir, not to the python script
-import infinibatch
-```
+To install it, see README.md
 
 ## Tutorial
 
