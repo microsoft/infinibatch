@@ -16,7 +16,7 @@ jobs:
           python-version: '3.8'
       - name: Build Documentation
         run: |
-          pip install pdoc3
+          pip install pdoc3 torch
           pdoc -o docs --template-dir docs --html infinibatch
       - name: Deploy Documentation
         uses: JamesIves/github-pages-deploy-action@3.5.9
