@@ -216,7 +216,7 @@ import math
 import multiprocessing as python_multiprocessing
 import os
 from random import Random
-from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union, cast
 
 
 # TODO for next release:
@@ -242,7 +242,7 @@ class CheckpointableIterator(collections.abc.Iterator):
 
     The interface (getstate, setstate) is inspired by Python's random package.
     """
-    def __iter__(self):
+    def __iter__(self) -> CheckpointableIterator:
         return self
 
     @abstractmethod
@@ -360,7 +360,7 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
 
     For example, this is used for randomizing the pathnames of data blocks read by ChunkedReadlinesIterator.
     """
-    def __init__(self, source_items: List, seed: int=0, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+    def __init__(self, source_items: List, seed: Optional[int]=0, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
         """
         Args:
             source_items: input list, must not be empty and must be small enough to fit into RAM entirely, ownership of the list and the data goes to the iterator, do not modify it!
@@ -466,7 +466,7 @@ class SelectManyIterator(CheckpointableIterator):
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator          # type: CheckpointableIterator
-        self._collection_selector = collection_selector  # type: Callable[[Any], Iterator]
+        self._collection_selector = collection_selector  # type: Optional[Callable[[Any], Iterator]]
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -517,6 +517,8 @@ class BufferedShuffleIterator(CheckpointableIterator):
         self._source_iterator = source_iterator
         self._buffer_size = buffer_size
         self._seed = seed
+        self._buffer : List
+        self._random : Random
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -632,7 +634,7 @@ class ZipIterator(CheckpointableIterator):
         for source_iterator in source_iterators:
             if not isinstance(source_iterator, CheckpointableIterator):
                 raise ValueError('all iterators in source_iterators have to be CheckpointableIterator')
-        self._source_iterators = source_iterators    # type: List[CheckpointableIterator]
+        self._source_iterators = list(source_iterators)    # type: List[CheckpointableIterator]
 
     def getstate(self) -> Dict:
         return {'input_states': tuple(iterator.getstate() for iterator in self._source_iterators)}
@@ -898,7 +900,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         self._buffer_size = buffer_size          # type: int
         self._QueueType = multiprocessing_module.Queue if multiprocessing_module else  \
                           python_multiprocessing.Queue
-        self._prefetch_process = None            # type: Process
+        self._prefetch_process = None            # type: Optional[python_multiprocessing.Process]
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -1031,10 +1033,10 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
         self._read_ahead = read_ahead  # type: int
         # initialize state
         self._seed = seed
-        self._random = None
+        self._random = None            # type: Optional[Random]
         if shuffle:
-            self._random = Random(self._seed)          # type: Random
-        self._source_iterator = iter(source_iterator)  # type: CheckpointableIterator
+            self._random = Random(self._seed)
+        self._source_iterator = cast(CheckpointableIterator, iter(source_iterator))  # type: CheckpointableIterator
         self.setstate(None)
 
     def getstate(self):
@@ -1043,16 +1045,17 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
                 'num_served':   self._num_batches_yielded}
 
     def setstate(self, checkpoint: Optional[Dict]):
-        self._source_state        = checkpoint['source_state'] if checkpoint else None  # type: Dict  -- state of input before reading the current set of batches
-        self._random_state        = checkpoint['random_state'] if checkpoint else None  # type: Any   -- state of random generator at _source_state
-        self._num_batches_yielded = checkpoint['num_served']   if checkpoint else 0     # type: int   -- number of batches served from the current set of batches
+        self._source_state        = checkpoint['source_state'] if checkpoint else None  # type: Dict  # state of input before reading the current set of batches
+        self._random_state        = checkpoint['random_state'] if checkpoint else None  # type: Any   # state of random generator at _source_state
+        self._num_batches_yielded = checkpoint['num_served']   if checkpoint else 0     # type: int   # number of batches served from the current set of batches
         # checkpointing: restore to start of current set of batches
         self._source_iterator.setstate(self._source_state)
-        if self._random_state:
-            self._random.setstate(self._random_state)
-        elif self._random:
-            self._random.seed(self._seed)
-        self._source_exhausted = False  # type: bool  -- set to True once we hit StopIteration on source
+        if self._random:
+            if self._random_state:
+                self._random.setstate(self._random_state)
+            else:
+                self._random.seed(self._seed)
+        self._source_exhausted = False  # type: bool  # set to True once we hit StopIteration on source
         def _generate():
             skip_to_checkpoint = self._num_batches_yielded
             source_exhausted = False
@@ -1075,15 +1078,15 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
                 for batch in batches:
                     self._num_batches_yielded += 1
                     yield batch
-        self._iterator = _generate()  # type: Iterator  -- iterator into current set of batches
+        self._iterator = _generate()  # type: Iterator  # iterator into current set of batches
 
     def _create_batches(self, items: List[Any]) -> List[List[Any]]:  # helper to form batches from a list of items
             # sort by length, longest first
             if self._key:
                 items.sort(key=self._key, reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
             # group into batches
-            cur_batch = None
-            batches = []
+            cur_batch = None  # type: Optional[List[Any]]
+            batches = []      # type: List[Any]
             for item in items:
                 if not cur_batch:
                     batch_size = self._batch_size if isinstance(self._batch_size, int) else \
