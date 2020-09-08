@@ -20,23 +20,8 @@ Infinibatch is a library of checkpointable iterators for randomized data loading
 
 Infinibatch requires Python 3.5 and has no dependencies.
 There is presently no pip package.
-To install it, please copy this library into a subfolder in your project:
-```bash
-cd YOUR_PROJECT_FOLDER
-git clone https://msasg.visualstudio.com/DefaultCollection/SDRG/_git/infinibatch
-```
-or, better, as a submodule reference:
-```bash
-git submodule add https://msasg.visualstudio.com/DefaultCollection/SDRG/_git/infinibatch
-```
-It is now located at `infinibatch/infinibatch`, e.g. the main import file is `infinibatch/infinibatch/__init__.py`.
 
-To import it, you need to add that folder to your `PYTHONPATH` variable externally, or to `sys.path` inside the code:
-```python
-import sys
-sys.path.insert(0,'infinibatch')  # note: relative paths are relative to your current dir, not to the python script
-import infinibatch
-```
+To install it, see README.md
 
 ## Tutorial
 
@@ -111,8 +96,8 @@ We will first show the easiest way to read data with Infinibatch, using the help
 This function will create an Infinibatch iterator that yields the content of your data in random order.
 Please the following program:
 ```python
-import sys, gzip, glob
-sys.path.insert(0,'infinibatch')
+import gzip, glob
+
 from infinibatch import datasets as ds
 
 ds = ds.chunked_dataset_iterator(
@@ -164,8 +149,8 @@ This is an example how one forms pipelines of iterators with Infinibatch
 Once an iterator is passed to another as its source, consider it owned by that other iterator,
 it must no longer be accessed by the calling code.
 ```python
-import sys, gzip, glob
-sys.path.insert(0,'infinibatch')
+import gzip, glob
+
 from infinibatch import datasets as ds
 from infinibatch import iterators as it
 
@@ -291,3 +276,5 @@ scenarios require more complex combinations of data. To create those, you will n
 to compose the necessary data reader from the underlying building blocks.
 This is described at the documentation of the module `iterators`.
 """
+
+from .iterators import *

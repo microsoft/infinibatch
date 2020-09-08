@@ -6,12 +6,11 @@
 #   block_randomize --azure-storage-key $MY_KEY https://myaccount.blob.core.windows.net/mycontainer/my_chunked_data_folder
 
 import os, sys, inspect
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))))  # find our imports
 
 from infinibatch.datasets import chunked_dataset_iterator
 
 from typing import Union, Iterator, Callable, Any, Optional, Dict
-import os, sys, re
+import os, re
 import gzip
 
 
