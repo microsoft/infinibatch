@@ -1,11 +1,10 @@
-from .iterators import create_source_iterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
+from .iterators import create_source_iterator, CheckpointableIterator, SelectManyIterator, PrefetchIterator, BufferedShuffleIterator, BlockwiseShuffleIterator, MapIterator
 from typing import List, Union, Iterable, Iterator, Callable, Any, Optional, Dict
 import os, sys
 
 """
 This module contains common datasets, which are implemented as convenience functions that compose underlying Infinibatch iterators.
 """
-
 
 def bump_seed(seed: Optional[int], step = 1):
     """
@@ -19,7 +18,7 @@ def chunked_dataset_iterator(chunk_refs: List, read_chunk_fn: Callable[[Any], It
                              seed: Optional[int]=None, shuffle: bool=True, use_windowed: bool=False,
                              transform: Callable[[Any],Any]=None,
                              prefetch: bool=False,
-                             num_instances: int=1, instance_rank: int=0):
+                             num_instances: int=1, instance_rank: int=0) -> CheckpointableIterator:
     """
     Dataset reading data from gzipped chunks.
 
@@ -47,9 +46,9 @@ def chunked_dataset_iterator(chunk_refs: List, read_chunk_fn: Callable[[Any], It
     if not train and shuffle:
         raise ValueError('shuffling is not supported when train=False')
     # set up the chunk reader
-    chunk_refs = create_source_iterator(chunk_refs, train=train, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
+    chunks = create_source_iterator(chunk_refs, train=train, seed=seed, shuffle=shuffle, num_instances=num_instances, instance_rank=instance_rank)
     # set up the item reader
-    samples = SelectManyIterator(source_iterator=chunk_refs, collection_selector=read_chunk_fn)
+    samples = SelectManyIterator(source_iterator=chunks, collection_selector=read_chunk_fn)  # type: CheckpointableIterator
     # wrap the I/O operation in a prefetch iterator
     if prefetch:
         samples = PrefetchIterator(samples, buffer_size)
