@@ -30,6 +30,10 @@ cd infinibatch
 pip install -e .
 ```
 
+## Documentation
+
+The documentation can be found here: https://microsoft.github.io/infinibatch/
+
 ## Tutorial
 
 This little tutorial walks you through the steps of preparing your data and consuming them from Python code as batches.
@@ -287,11 +291,6 @@ This is described at the documentation of the module `iterators`.
 
 To view the documentation, please clone the repository and go to docs/infinibatch/index.html
 
-To run unit tests, run the following command.
-```
-python -m unittest discover -s test
-```
-
 When working on the documentation, install pdoc:
 ```
 pip install pdoc3
@@ -305,6 +304,17 @@ We currently haven't set up the CI to automatically generate the documentation.
 Before you merge anything into master, please delete the existing documentation in docs/infinibatch and run
 ```
 pdoc -o docs --template-dir docs --html infinibatch
+```
+
+## Testing
+
+To run unit tests, run the following command.
+```
+python -m unittest discover -s test
+```
+To type-check with `mypy` (if installed):
+```
+mypy infinibatch
 ```
 
 # Contributing
