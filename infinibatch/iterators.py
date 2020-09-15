@@ -242,7 +242,7 @@ class CheckpointableIterator(collections.abc.Iterator):
 
     The interface (getstate, setstate) is inspired by Python's random package.
     """
-    def __iter__(self) -> CheckpointableIterator:
+    def __iter__(self) -> 'CheckpointableIterator':
         return self
 
     @abstractmethod
@@ -318,7 +318,7 @@ class NativeCheckpointableIterator(CheckpointableIterator):
         return item
 
 
-def create_source_iterator(source_items: List, train: bool=True, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0):
+def create_source_iterator(source_items: List, train: bool=True, seed: Optional[int]=None, shuffle: bool=True, num_instances: int=1, instance_rank: int=0) -> CheckpointableIterator:
     if not train and shuffle:
         raise ValueError('shuffling is not supported when train=False')
     if train:
@@ -327,7 +327,7 @@ def create_source_iterator(source_items: List, train: bool=True, seed: Optional[
         return ChunkedSourceIterator(source_items, num_instances=num_instances, instance_rank=instance_rank)
 
 
-def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_rank: int=0):
+def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_rank: int=0) -> CheckpointableIterator:
     """
     Cuts source list into chunks, one per instance, and serves out items in chunk corresponding to instance_rank
 
@@ -517,8 +517,6 @@ class BufferedShuffleIterator(CheckpointableIterator):
         self._source_iterator = source_iterator
         self._buffer_size = buffer_size
         self._seed = seed
-        self._buffer : List
-        self._random : Random
         self.setstate(None)
 
     def getstate(self) -> Dict:
@@ -535,7 +533,7 @@ class BufferedShuffleIterator(CheckpointableIterator):
         else:
             self._source_iterator.setstate(None)
             self._buffer = [None for _ in range(self._buffer_size)]
-            self._random = Random(self._seed)
+            self._random = Random(self._seed)  # type: Random
         self._iterator = self._generate()
 
     def _generate(self) -> Iterator:
@@ -590,7 +588,7 @@ class MapIterator(CheckpointableIterator):
         return self._transform(next(self._source_iterator))
 
 
-def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Callable[[str],Any], num_processes: int, num_items_per_process: int):
+def ParallelMapIterator(source_iterator: CheckpointableIterator, transform: Callable[[str],Any], num_processes: int, num_items_per_process: int) -> CheckpointableIterator:
     """
     Applies given transform to each data item
 
