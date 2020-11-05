@@ -17,6 +17,12 @@ import gzip
 # helper functions to abstract access to Azure blobs
 # @TODO: These will be abstracted into a helper library in a future version.
 def _try_parse_azure_blob_uri(path: str):
+    """
+    Try to guess the blob uri from the given blob.
+
+    Args:
+        path: (str): write your description
+    """
     try:
         m = re.compile("https://([a-z0-9]*).blob.core.windows.net/([^/]*)/(.*)").match(path)
         #print (m.group(1))
@@ -28,6 +34,16 @@ def _try_parse_azure_blob_uri(path: str):
 
 
 def _get_azure_key(storage_account: str, credentials: Optional[Union[str,Dict[str,str]]]):
+    """
+    Gets storage key from storage key from storage.
+
+    Args:
+        storage_account: (todo): write your description
+        credentials: (str): write your description
+        Optional: (todo): write your description
+        Union: (todo): write your description
+        Dict: (todo): write your description
+    """
     if not credentials:
         return None
     elif isinstance(credentials, str):
@@ -37,6 +53,16 @@ def _get_azure_key(storage_account: str, credentials: Optional[Union[str,Dict[st
 
 
 def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]) -> Iterator[str]:
+    """
+    Read a file.
+
+    Args:
+        path: (str): write your description
+        credentials: (str): write your description
+        Optional: (todo): write your description
+        Union: (str): write your description
+        Dict: (todo): write your description
+    """
     blob_data = _try_parse_azure_blob_uri(path)
     if blob_data is None:
         with open(path, "rb") as f:
@@ -56,6 +82,17 @@ def read_utf8_file(path: str, credentials: Optional[Union[str,Dict[str,str]]]) -
 
 
 def enumerate_files(dir: str, ext: str, credentials: Optional[Union[str,Dict[str,str]]]):
+    """
+    Enumerate files in a directory.
+
+    Args:
+        dir: (str): write your description
+        ext: (str): write your description
+        credentials: (str): write your description
+        Optional: (todo): write your description
+        Union: (str): write your description
+        Dict: (todo): write your description
+    """
     blob_data = _try_parse_azure_blob_uri(dir)
     if blob_data is None:
         return [os.path.join(dir, path.name)
