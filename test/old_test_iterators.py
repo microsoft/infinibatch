@@ -250,17 +250,6 @@ class TestBlockwiseShuffleIterator(TestBase):
         self.assertListEqual(items, self.flattened_test_data)
 
 
-def map_fun(n):
-    return n + 1
-
-
-class TestMapIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        data = list(range(53))
-        self.expected_result = [map_fun(n) for n in data]
-        self.iterator = MapIterator(NativeCheckpointableIterator(data), map_fun)
-
-
 class TestParallelMapIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         data = list(range(53))

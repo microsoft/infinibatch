@@ -234,3 +234,19 @@ class TestSamplingRandomMapIterator(TestBase, TestFiniteIteratorMixin):
             it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
             self.iterators.append(it)
 
+
+class TestMapIterator(TestBase, TestFiniteIteratorMixin):
+    @staticmethod
+    def transform(item):
+        return 2 * item
+
+    def setUp(self):
+        super().setUp()
+        self.expected_results = []
+        self.iterators = []
+        for n in self.lengths:
+            data = list(range(n))
+            expected_result = [self.transform(item) for item in data]
+            self.expected_results.append(expected_result)
+            it = MapIterator(NativeCheckpointableIterator(data), self.transform)
+            self.iterators.append(it)
