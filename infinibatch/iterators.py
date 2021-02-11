@@ -340,6 +340,8 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
         num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
     """
+    if instance_rank >= num_instances:
+        raise ValueError("invalid instance_rank")
     # we split the data into num_instances consecutive parts
     # that differ by at most 1 in size
     num_items_per_rank = len(source_items) // num_instances

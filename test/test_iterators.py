@@ -135,3 +135,9 @@ class TestChunkedSourceIterator(TestBase):
                     sizes.append(len(output))
                 self.assertEqual(data, result)
                 self.assertTrue(max(sizes) - min(sizes) <= 1)  # make sure data is split as evenly as possible
+
+    def test_rank_too_large(self):
+        def create_iterator():
+            it = ChunkedSourceIterator([1], num_instances=2, instance_rank=2)
+
+        self.assertRaises(ValueError, create_iterator)
