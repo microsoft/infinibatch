@@ -1,6 +1,6 @@
 import copy
 import itertools
-import random
+from random import Random
 import unittest
 
 from infinibatch.iterators import *
@@ -10,6 +10,11 @@ if __name__ == "__main__":
 
 
 class TestBase(unittest.TestCase):
+    def setUp(self):
+        self.lengths = [1, 2, 3, 4, 5, 42, 157, 256]
+        self.world_sizes = [1, 2, 3, 4, 5, 11, 16, 128, 255, 774]
+        self.seed = 42
+
     def assertMultisetEqual(self, a, b):
         def list_to_dict(l):
             d = {}
@@ -20,9 +25,70 @@ class TestBase(unittest.TestCase):
         self.assertEqual(list_to_dict(a), list_to_dict(b))
 
 
+class TestFiniteIteratorMixin:
+    """
+    Mixin to be used in combination with TestBase
+    to test basic properties of finite CheckpointableIterators
+    """
+
+    def test_basic(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            result = list(it)
+            self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_start(self):
+        for it in self.iterators:
+            expected_result = list(it)  # extract data
+            it.setstate(None)  # reset to start
+            result = list(it)
+            self.assertEqual(result, expected_result)
+
+    def _test_checkpointing_from_pos(self, it, pos):
+        for _ in range(pos):  # go to pos
+            next(it)
+        checkpoint = it.getstate()  # take checkpoint
+        expected_result = list(it)  # extract data
+        it.setstate(checkpoint)  # reset to checkpoint
+        result = list(it)
+        self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_one(self):
+        for it in self.iterators:
+            pos = 1
+            self._test_checkpointing_from_pos(it, pos)
+
+    def test_checkpointing_from_quarter(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            pos = len(expected_result) // 4
+            self._test_checkpointing_from_pos(it, pos)
+
+    def test_checkpointing_from_third(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            pos = len(expected_result) // 3
+            self._test_checkpointing_from_pos(it, pos)
+
+    def test_checkpointing_from_half(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            pos = len(expected_result) // 2
+            self._test_checkpointing_from_pos(it, pos)
+
+    def test_checkpointing_before_end(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            pos = len(expected_result) - 1
+            self._test_checkpointing_from_pos(it, pos)
+
+    def test_checkpointin_at_end(self):
+        for it in self.iterators:
+            list(it)  # exhaust iterator
+            checkpoint = it.getstate()  # take checkpoint
+            it.setstate(None)  # reset to beginning
+            it.setstate(checkpoint)  # reset to checkpoint
+            self.assertRaises(StopIteration, it.__next__)
+
+
 class TestInfinitePermutationSourceIterator(TestBase):
     def setUp(self):
-        self.lengths = [1, 2, 3, 4, 5, 42, 157, 256]
+        super().setUp()
         self.repeats = [1, 2, 3, 4, 5]
 
     def test_no_shuffle(self):
@@ -116,13 +182,19 @@ class TestInfinitePermutationSourceIterator(TestBase):
         self.assertRaises(ValueError, create_iterator)
 
 
-class TestChunkedSourceIterator(TestBase):
-    # ChunkedSourceIterator has no custom checkpointing logic
-    # so we do not test checkpointing here
-    def test(self):
-        lengths = [1, 2, 3, 4, 5, 42, 157, 256]
-        world_sizes = [1, 2, 3, 4, 5, 11, 16, 128, 255, 774]
-        for n, num_instances in itertools.product(lengths, world_sizes):
+class TestChunkedSourceIterator(TestBase, TestFiniteIteratorMixin):
+    def setUp(self):
+        super().setUp()
+        self.expected_results = []
+        self.iterators = []
+        for n in self.lengths:
+            data = list(range(n))
+            self.expected_results.append(data)
+            it = ChunkedSourceIterator(copy.deepcopy(data))
+            self.iterators.append(it)
+
+    def test_multiple_instances(self):
+        for n, num_instances in itertools.product(self.lengths, self.world_sizes):
             with self.subTest(f"n={n}, num_instances={num_instances}"):
                 data = list(range(n))
                 result = []
@@ -144,49 +216,21 @@ class TestChunkedSourceIterator(TestBase):
         self.assertRaises(ValueError, create_iterator)
 
 
-class TestSamplingRandomMapIterator(TestBase):
-    def setUp(self):
-        self.lengths = [1, 2, 3, 4, 5, 42, 157, 256]
-        self.seed = 42
-
+class TestSamplingRandomMapIterator(TestBase, TestFiniteIteratorMixin):
     @staticmethod
     def transform(random, item):
         return item + random.random()
 
-    def test_basic(self):
+    def setUp(self):
+        super().setUp()
+        self.expected_results = []
+        self.iterators = []
         for n in self.lengths:
             data = list(range(n))
             random = Random()
             random.seed(self.seed)
             expected_result = [n + random.random() for n in data]
-            it = SamplingRandomMapIterator(
-                NativeCheckpointableIterator(copy.deepcopy(data)), transform=self.transform, seed=self.seed
-            )
-            result = list(it)
-            self.assertEqual(result, expected_result)
+            self.expected_results.append(expected_result)
+            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            self.iterators.append(it)
 
-    def test_checkpointing_from_start(self):
-        for n in self.lengths:
-            data = list(range(n))
-            it = SamplingRandomMapIterator(
-                NativeCheckpointableIterator(copy.deepcopy(data)), transform=self.transform, seed=self.seed
-            )
-            expected_result = list(it)  # extract data
-            it.setstate(None)  # reset to start
-            result = list(it)
-            self.assertEqual(result, expected_result)
-
-    def test_checkpointing_from_middle(self):
-        for n in self.lengths:
-            data = list(range(n))
-            it = SamplingRandomMapIterator(
-                NativeCheckpointableIterator(copy.deepcopy(data)), transform=self.transform, seed=self.seed
-            )
-            checkpoint_pos = n // 3
-            for _ in range(checkpoint_pos):  # go to checkpoint_pos
-                next(it)
-            checkpoint = it.getstate()  # take checkpoint
-            expected_result = list(it)  # extract data
-            it.setstate(checkpoint)  # reset to checkpoint
-            result = list(it)
-            self.assertEqual(result, expected_result)
