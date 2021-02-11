@@ -46,10 +46,10 @@ class TestInfinitePermutationSourceIterator(TestBase):
             with self.subTest(f"n={n}, k={k}"):
                 data = list(range(n))
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data))
-                expected_data = [next(it) for _ in range(k * n)]  # extract data
+                expected_result = [next(it) for _ in range(k * n)]  # extract data
                 it.setstate(None)  # reset to start
                 result = [next(it) for _ in range(k * n)]
-                self.assertEqual(expected_data, result)
+                self.assertEqual(result, expected_result)
 
     def test_checkpointing_from_middle(self):
         for n, k in itertools.product(self.lengths, self.repeats):
@@ -60,12 +60,12 @@ class TestInfinitePermutationSourceIterator(TestBase):
                 for _ in range(checkpoint_pos):  # go to checkpoint_pos
                     next(it)
                 checkpoint = it.getstate()  # take checkpoint
-                expected_data = [next(it) for _ in range(k * n)]  # extract data
+                expected_result = [next(it) for _ in range(k * n)]  # extract data
                 for _ in range(checkpoint_pos):  # move forward some more
                     next(it)
                 it.setstate(checkpoint)  # reset to checkpoint
                 result = [next(it) for _ in range(k * n)]  # get data again
-                self.assertEqual(expected_data, result)
+                self.assertEqual(result, expected_result)
 
     def test_checkpointing_at_boundary(self):
         for n, k in itertools.product(self.lengths, self.repeats):
@@ -76,12 +76,12 @@ class TestInfinitePermutationSourceIterator(TestBase):
                 for _ in range(checkpoint_pos):  # go to checkpoint_pos
                     next(it)
                 checkpoint = it.getstate()  # take checkpoint
-                expected_data = [next(it) for _ in range(k * n)]  # extract data
+                expected_result = [next(it) for _ in range(k * n)]  # extract data
                 for _ in range(checkpoint_pos):  # move forward some more
                     next(it)
                 it.setstate(checkpoint)  # reset to checkpoint
                 result = [next(it) for _ in range(k * n)]  # get data again
-                self.assertEqual(expected_data, result)
+                self.assertEqual(result, expected_result)
 
     # this test currently hangs / fails because of a bug
     # def test_multiple_instances(self):
@@ -159,14 +159,18 @@ class TestSamplingRandomMapIterator(TestBase):
             random = Random()
             random.seed(self.seed)
             expected_result = [n + random.random() for n in data]
-            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            it = SamplingRandomMapIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)), transform=self.transform, seed=self.seed
+            )
             result = list(it)
             self.assertEqual(result, expected_result)
 
     def test_checkpointing_from_start(self):
         for n in self.lengths:
             data = list(range(n))
-            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            it = SamplingRandomMapIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)), transform=self.transform, seed=self.seed
+            )
             expected_result = list(it)  # extract data
             it.setstate(None)  # reset to start
             result = list(it)
@@ -175,7 +179,9 @@ class TestSamplingRandomMapIterator(TestBase):
     def test_checkpointing_from_middle(self):
         for n in self.lengths:
             data = list(range(n))
-            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            it = SamplingRandomMapIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)), transform=self.transform, seed=self.seed
+            )
             checkpoint_pos = n // 3
             for _ in range(checkpoint_pos):  # go to checkpoint_pos
                 next(it)
