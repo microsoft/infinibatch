@@ -340,13 +340,14 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
         num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
     """
-    # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
-    chunk_size = math.ceil(len(source_items) / num_instances)
-    # this does not cause any out-of-bounds issues:
-    # a slice with a start-index beyong the end of the list is empty,
-    # and an end-index of a slice is capped at the end of the list
-    chunk = source_items[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
-    return NativeCheckpointableIterator(chunk)
+    # we split the data into num_instances consecutive parts
+    # that differ by at most 1 in size
+    num_items_per_rank = len(source_items) // num_instances
+    ranks_with_additional_item = len(source_items) - num_instances * num_items_per_rank
+    def boundary(rank):
+        return rank * num_items_per_rank + min(rank, ranks_with_additional_item)
+    items = source_items[boundary(instance_rank):boundary(instance_rank + 1)]
+    return NativeCheckpointableIterator(items)
 
 
 class InfinitePermutationSourceIterator(CheckpointableIterator):
