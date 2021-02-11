@@ -81,3 +81,35 @@ class TestInfinitePermutationSourceIterator(TestBase):
                 it.setstate(checkpoint)  # reset to checkpoint
                 result = [next(it) for _ in range(k * n)]  # get data again
                 self.assertEqual(expected_data, result)
+
+    # this test currently hangs / fails because of a bug
+    # def test_multiple_instances(self):
+    #     world_sizes = [2, 3, 4, 5, 11, 16, 128, 773]
+    #     for n, k, num_instances in itertools.product(self.lengths, self.repeats, world_sizes):
+    #         data = list(range(n))
+    #         it = InfinitePermutationSourceIterator(copy.deepcopy(data))
+    #         single_instance_data = [next(it) for _ in range(k * n * num_instances)]
+    #         for instance_rank in range(num_instances):
+    #             with self.subTest(f"n={n}, k={k}, num_instances={num_instances}, instance_rank={instance_rank}"):
+    #                 it = InfinitePermutationSourceIterator(
+    #                     copy.deepcopy(data), num_instances=num_instances, instance_rank=instance_rank
+    #                 )
+    #                 expected_data = []
+    #                 pos = instance_rank
+    #                 while len(expected_data) < k * n:
+    #                     expected_data.append(data[pos])
+    #                     pos += instance_rank
+    #                 result = [next(it) for _ in range(k * n)]
+    #                 self.assertEqual(expected_data, result)
+
+    def test_empty_source(self):
+        def create_iterator():
+            it = InfinitePermutationSourceIterator([])
+
+        self.assertRaises(ValueError, create_iterator)
+
+    def test_rank_too_large(self):
+        def create_iterator():
+            it = InfinitePermutationSourceIterator([1], num_instances=2, instance_rank=2)
+
+        self.assertRaises(ValueError, create_iterator)

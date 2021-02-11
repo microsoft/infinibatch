@@ -138,53 +138,6 @@ class TestChunkedSourceIterator(unittest.TestCase, TestCheckpointableIterator):
             self.assertListEqual(items, self.expected_result)
 
 
-class TestInfinitePermutationSourceIterator(TestBase):
-    def test_repeat_once(self):
-        # This tests that two consecutive iterations through the test data yields differently ordered sequences.
-        reader = iter(InfinitePermutationSourceIterator(self.flattened_test_data, 42))
-        items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
-        items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
-        self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
-        self.assertTrue(any(item0 != item1 for item0, item1 in zip(items0, items1)))
-
-    def test_reiter_once(self):
-        # This differs from test_repeat_once in that we use checkpoints.
-        reader = InfinitePermutationSourceIterator(self.flattened_test_data, 42)
-        checkpoint = reader.getstate()
-        items0 = list(itertools.islice(reader, len(self.flattened_test_data)))
-        reader.setstate(checkpoint)
-        items1 = list(itertools.islice(reader, len(self.flattened_test_data)))
-        self.assertMultisetEqual(items0 + items1, self.flattened_test_data * 2)
-        self.assertSequenceEqual(items0, items1)
-
-    def test_checkpointing(self):
-        random = Random()
-        for i in range(5):
-            # random sequence lengths to for testing different configurations
-            test_source_length        = random.randrange(5,25)
-            test_first_output_length  = random.randrange(5,25)
-            test_second_output_length = random.randrange(5,25)
-            # source
-            test_source = list(range(test_source_length))
-            reader = InfinitePermutationSourceIterator(test_source, seed=i)
-            # fetch a first sequence
-            _ = list(itertools.islice(reader, test_first_output_length))
-            # fetch a second sequence
-            checkpoint = reader.getstate()
-            items1a = list(itertools.islice(reader, test_second_output_length))
-            # fetch that second sequence again via checkpointing
-            reader.setstate(checkpoint)
-            items1b = list(itertools.islice(reader, test_second_output_length))
-            # and again with serialized checkpoint
-            as_json = pickle.dumps(checkpoint)
-            checkpoint2 = pickle.loads(as_json)
-            reader.setstate(checkpoint2)
-            items1c = list(itertools.islice(reader, test_second_output_length))
-            # must be the same
-            self.assertTrue(items1a == items1b)
-            self.assertTrue(items1a == items1c)
-
-
 class TestNativeCheckpointableIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         self.expected_result = list(range(53))
