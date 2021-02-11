@@ -37,11 +37,20 @@ class TestFiniteIteratorMixin:
                 result = list(it)
                 self.assertEqual(result, expected_result)
 
-    def test_checkpointing_from_start(self):
+    def test_checkpointing_reset(self):
         for it, expected_result in zip(self.iterators, self.expected_results):
             with self.subTest(f"n={len(expected_result)}"):
                 expected_result = list(it)  # extract data
                 it.setstate(None)  # reset to start
+                result = list(it)
+                self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_start(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            with self.subTest(f"n={len(expected_result)}"):
+                checkpoint = it.getstate()
+                expected_result = list(it)  # extract data
+                it.setstate(checkpoint)  # reset to start
                 result = list(it)
                 self.assertEqual(result, expected_result)
 
@@ -84,7 +93,7 @@ class TestFiniteIteratorMixin:
                 pos = len(expected_result) - 1
                 self._test_checkpointing_from_pos(it, pos)
 
-    def test_checkpointin_at_end(self):
+    def test_checkpointing_at_end(self):
         for it, expected_result in zip(self.iterators, self.expected_results):
             with self.subTest(f"n={len(expected_result)}"):
                 list(it)  # exhaust iterator
@@ -92,6 +101,56 @@ class TestFiniteIteratorMixin:
                 it.setstate(None)  # reset to beginning
                 it.setstate(checkpoint)  # reset to checkpoint
                 self.assertRaises(StopIteration, it.__next__)
+
+    def test_checkpointing_complex(self):
+        for it, expected_result in zip(self.iterators, self.expected_results):
+            with self.subTest(f"n={len(expected_result)}"):
+                # getstate from fresh iterator
+                it.getstate()
+                result = list(it)
+                self.assertEqual(result, expected_result)
+
+                # get a bunch of checkpoints at different positions
+                it.setstate(None)
+                positions = [
+                    0,
+                    len(expected_result) // 7,
+                    len(expected_result) // 6,
+                    len(expected_result) // 5,
+                    len(expected_result) // 4,
+                    len(expected_result) // 3,
+                    len(expected_result) // 2,
+                ]
+                checkpoints = []
+                for i in range(len(positions)):
+                    offset = positions[i] - positions[i - 1] if i > 0 else positions[0]
+                    for _ in range(offset):
+                        next(it)
+                    checkpoints.append(it.getstate())
+
+                # check that iterator returns correct result at all checkpoints
+                for pos, checkpoint in zip(positions, checkpoints):
+                    it.setstate(checkpoint)
+                    self.assertEqual(list(it), expected_result[pos:])
+
+                # check that iterator returns correct result at all checkpoints in reverse order
+                tuples = list(zip(positions, checkpoints))
+                tuples.reverse()
+                for pos, checkpoint in tuples:
+                    it.setstate(checkpoint)
+                    self.assertEqual(list(it), expected_result[pos:])
+
+                # check that iterator returns correct result at all checkpoints
+                # while resetting between any two checkpoints
+                for pos, checkpoint in zip(positions, checkpoints):
+                    it.setstate(None)
+                    it.setstate(checkpoint)
+                    self.assertEqual(list(it), expected_result[pos:])
+
+                # and as the grand finale: reset and check again
+                it.setstate(None)
+                result = list(it)
+                self.assertEqual(result, expected_result)
 
 
 class TestInfinitePermutationSourceIterator(TestBase):
