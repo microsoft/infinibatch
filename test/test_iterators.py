@@ -334,12 +334,12 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin):
                 NativeCheckpointableIterator(data3),
             )
             self.test_cases.append((f"n={n}, triples", expected_result, it))
-        # TODO: There is a bug in ZipIterator if one of the iterators is empty -> FIX
-        # for n in self.lengths:
-        #     data1 = list(range(n))
-        #     data2 = [item * item for item in data1]
-        #     data2 = data2[:-3]
-        #     expected_result = list(zip(data1, data2))
-        #     it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
-        #     self.test_cases.append((f"n={n}, different lengths", expected_result, it))
+        for n in self.lengths:
+            if n > 3:  # smaller n give us an empty iterator, which causes issues
+                data1 = list(range(n))
+                data2 = [item * item for item in data1]
+                data2 = data2[:-3]
+                expected_result = list(zip(data1, data2))
+                it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
+                self.test_cases.append((f"n={n}, different lengths", expected_result, it))
 
