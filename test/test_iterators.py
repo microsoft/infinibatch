@@ -32,22 +32,22 @@ class TestFiniteIteratorMixin:
     """
 
     def test_basic(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 result = list(it)
                 self.assertEqual(result, expected_result)
 
     def test_checkpointing_reset(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 expected_result = list(it)  # extract data
                 it.setstate(None)  # reset to start
                 result = list(it)
                 self.assertEqual(result, expected_result)
 
     def test_checkpointing_from_start(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 checkpoint = it.getstate()
                 expected_result = list(it)  # extract data
                 it.setstate(checkpoint)  # reset to start
@@ -64,38 +64,38 @@ class TestFiniteIteratorMixin:
         self.assertEqual(result, expected_result)
 
     def test_checkpointing_from_one(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 pos = 1
                 self._test_checkpointing_from_pos(it, pos)
 
     def test_checkpointing_from_quarter(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 pos = len(expected_result) // 4
                 self._test_checkpointing_from_pos(it, pos)
 
     def test_checkpointing_from_third(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 pos = len(expected_result) // 3
                 self._test_checkpointing_from_pos(it, pos)
 
     def test_checkpointing_from_half(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 pos = len(expected_result) // 2
                 self._test_checkpointing_from_pos(it, pos)
 
     def test_checkpointing_before_end(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 pos = len(expected_result) - 1
                 self._test_checkpointing_from_pos(it, pos)
 
     def test_checkpointing_at_end(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 list(it)  # exhaust iterator
                 checkpoint = it.getstate()  # take checkpoint
                 it.setstate(None)  # reset to beginning
@@ -103,8 +103,8 @@ class TestFiniteIteratorMixin:
                 self.assertRaises(StopIteration, it.__next__)
 
     def test_checkpointing_complex(self):
-        for it, expected_result in zip(self.iterators, self.expected_results):
-            with self.subTest(f"n={len(expected_result)}"):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
                 # getstate from fresh iterator
                 it.getstate()
                 result = list(it)
@@ -252,13 +252,11 @@ class TestInfinitePermutationSourceIterator(TestBase):
 class TestChunkedSourceIterator(TestBase, TestFiniteIteratorMixin):
     def setUp(self):
         super().setUp()
-        self.expected_results = []
-        self.iterators = []
+        self.test_cases = []
         for n in self.lengths:
             data = list(range(n))
-            self.expected_results.append(data)
             it = ChunkedSourceIterator(copy.deepcopy(data))
-            self.iterators.append(it)
+            self.test_cases.append((f"n={n}", data, it))
 
     def test_multiple_instances(self):
         for n, num_instances in itertools.product(self.lengths, self.world_sizes):
@@ -290,16 +288,14 @@ class TestSamplingRandomMapIterator(TestBase, TestFiniteIteratorMixin):
 
     def setUp(self):
         super().setUp()
-        self.expected_results = []
-        self.iterators = []
+        self.test_cases = []
         for n in self.lengths:
             data = list(range(n))
             random = Random()
             random.seed(self.seed)
             expected_result = [n + random.random() for n in data]
-            self.expected_results.append(expected_result)
             it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
-            self.iterators.append(it)
+            self.test_cases.append((f"n={n}", expected_result, it))
 
 
 class TestMapIterator(TestBase, TestFiniteIteratorMixin):
@@ -309,11 +305,33 @@ class TestMapIterator(TestBase, TestFiniteIteratorMixin):
 
     def setUp(self):
         super().setUp()
-        self.expected_results = []
-        self.iterators = []
+        self.test_cases = []
         for n in self.lengths:
             data = list(range(n))
             expected_result = [self.transform(item) for item in data]
-            self.expected_results.append(expected_result)
             it = MapIterator(NativeCheckpointableIterator(data), self.transform)
-            self.iterators.append(it)
+            self.test_cases.append((f"n={n}", expected_result, it))
+
+
+class TestZipIterator(TestBase, TestFiniteIteratorMixin):
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            data1 = list(range(n))
+            data2 = [item * item for item in data1]
+            expected_result = list(zip(data1, data2))
+            it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
+            self.test_cases.append((f"n={n}, pairs", expected_result, it))
+        for n in self.lengths:
+            data1 = list(range(n))
+            data2 = [item * item for item in data1]
+            data3 = [item * item for item in data2]
+            expected_result = list(zip(data1, data2, data3))
+            it = ZipIterator(
+                NativeCheckpointableIterator(data1),
+                NativeCheckpointableIterator(data2),
+                NativeCheckpointableIterator(data3),
+            )
+            self.test_cases.append((f"n={n}, triples", expected_result, it))
+
