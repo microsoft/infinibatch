@@ -1,5 +1,6 @@
 import copy
 import itertools
+import random
 import unittest
 
 from infinibatch.iterators import *
@@ -141,3 +142,45 @@ class TestChunkedSourceIterator(TestBase):
             it = ChunkedSourceIterator([1], num_instances=2, instance_rank=2)
 
         self.assertRaises(ValueError, create_iterator)
+
+
+class TestSamplingRandomMapIterator(TestBase):
+    def setUp(self):
+        self.lengths = [1, 2, 3, 4, 5, 42, 157, 256]
+        self.seed = 42
+
+    @staticmethod
+    def transform(random, item):
+        return item + random.random()
+
+    def test_basic(self):
+        for n in self.lengths:
+            data = list(range(n))
+            random = Random()
+            random.seed(self.seed)
+            expected_result = [n + random.random() for n in data]
+            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            result = list(it)
+            self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_start(self):
+        for n in self.lengths:
+            data = list(range(n))
+            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            expected_result = list(it)  # extract data
+            it.setstate(None)  # reset to start
+            result = list(it)
+            self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_middle(self):
+        for n in self.lengths:
+            data = list(range(n))
+            it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
+            checkpoint_pos = n // 3
+            for _ in range(checkpoint_pos):  # go to checkpoint_pos
+                next(it)
+            checkpoint = it.getstate()  # take checkpoint
+            expected_result = list(it)  # extract data
+            it.setstate(checkpoint)  # reset to checkpoint
+            result = list(it)
+            self.assertEqual(result, expected_result)

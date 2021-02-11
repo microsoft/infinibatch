@@ -154,21 +154,6 @@ class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
         self.iterator = RecurrentIterator(NativeCheckpointableIterator(data), step_function, initial_state=0)
 
 
-class TestSamplingRandomMapIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        data = list(range(53))
-
-        def transform(random: Random, item: int):
-            return item + random.random()
-
-        seed = 1
-        random = Random()
-        random.seed(seed)
-        self.expected_result = [n + random.random() for n in data]
-
-        self.iterator = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=transform, seed=seed)
-
-
 class TestFixedBatchIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         data = list(range(5))
