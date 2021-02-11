@@ -369,11 +369,13 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
             num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         """
+        if not source_items:
+            raise ValueError("source must not be empty")
         self._source_items = source_items
-        if not self._source_items:
-            raise ValueError("InfinitePermutationIterator: source must not be empty")
         self._shuffle = shuffle
         self._seed = seed
+        if instance_rank >= num_instances:
+            raise ValueError("invalid instance_rank")
         self._num_instances = num_instances
         self._instance_rank = instance_rank
         self.setstate(None)
