@@ -257,14 +257,6 @@ class TestParallelMapIterator(unittest.TestCase, TestCheckpointableIterator):
         self.iterator = ParallelMapIterator(NativeCheckpointableIterator(data), map_fun, 5, 7)
 
 
-class TestZipIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        data1 = list(range(53))
-        data2 = [n * n for n in data1]
-        self.expected_result = list(zip(data1, data2))
-        self.iterator = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
-
-
 class TestWindowedIterator(TestBase):
     def test(self):
         for n in [0, 2, 3, 8, 9, 10, 11, 12]:  # cover various boundary conditions
