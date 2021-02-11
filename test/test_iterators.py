@@ -21,7 +21,7 @@ class TestBase(unittest.TestCase):
 
 class TestInfinitePermutationSourceIterator(TestBase):
     def setUp(self):
-        self.lengths = [1, 2, 3, 4, 42, 57]
+        self.lengths = [1, 2, 3, 4, 5, 42, 157, 256]
         self.repeats = [1, 2, 3, 4, 5]
 
     def test_no_shuffle(self):
@@ -84,7 +84,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
 
     # this test currently hangs / fails because of a bug
     # def test_multiple_instances(self):
-    #     world_sizes = [2, 3, 4, 5, 11, 16, 128, 773]
+    #     world_sizes = [1, 2, 3, 4, 5, 11, 16, 128, 255, 774]
     #     for n, k, num_instances in itertools.product(self.lengths, self.repeats, world_sizes):
     #         data = list(range(n))
     #         it = InfinitePermutationSourceIterator(copy.deepcopy(data))
@@ -113,3 +113,24 @@ class TestInfinitePermutationSourceIterator(TestBase):
             it = InfinitePermutationSourceIterator([1], num_instances=2, instance_rank=2)
 
         self.assertRaises(ValueError, create_iterator)
+
+
+class TestChunkedSourceIterator(TestBase):
+    # ChunkedSourceIterator has no custom checkpointing logic
+    # so we do not test checkpointing here
+    def test(self):
+        lengths = [1, 2, 3, 4, 5, 42, 157, 256]
+        world_sizes = [1, 2, 3, 4, 5, 11, 16, 128, 255, 774]
+        for n, num_instances in itertools.product(lengths, world_sizes):
+            with self.subTest(f"n={n}, num_instances={num_instances}"):
+                data = list(range(n))
+                result = []
+                for instance_rank in range(num_instances):
+                    it = ChunkedSourceIterator(
+                        copy.deepcopy(data), num_instances=num_instances, instance_rank=instance_rank
+                    )
+                    output = list(it)
+                    if n >= num_instances:
+                        self.assertTrue(len(output) >= 1)
+                    result.extend(output)
+                self.assertEqual(data, result)
