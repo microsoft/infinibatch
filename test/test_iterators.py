@@ -125,12 +125,13 @@ class TestChunkedSourceIterator(TestBase):
             with self.subTest(f"n={n}, num_instances={num_instances}"):
                 data = list(range(n))
                 result = []
+                sizes = []
                 for instance_rank in range(num_instances):
                     it = ChunkedSourceIterator(
                         copy.deepcopy(data), num_instances=num_instances, instance_rank=instance_rank
                     )
                     output = list(it)
-                    if n >= num_instances:
-                        self.assertTrue(len(output) >= 1)
                     result.extend(output)
+                    sizes.append(len(output))
                 self.assertEqual(data, result)
+                self.assertTrue(max(sizes) - min(sizes) <= 1)  # make sure data is split as evenly as possible
