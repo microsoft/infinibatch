@@ -450,3 +450,37 @@ class TestRecurrentIterator(TestBase, TestFiniteIteratorMixin):
                 expected_result.append(self.step_function(expected_result[-1], i)[1])
             it = RecurrentIterator(NativeCheckpointableIterator(data), self.step_function, initial_state=0)
             self.test_cases.append((f"n={n}", expected_result, it))
+
+
+class TestSelectManyIterator(TestBase, TestFiniteIteratorMixin):
+    @staticmethod
+    def custom_selector(l):
+        return [l[0]]
+
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+
+        # default selector
+        for n in self.lengths:
+            for list_length in [1, 4, 9]:
+                data = list(range(n))
+                expected_result = copy.deepcopy(data)
+                lists = []
+                while data:
+                    lists.append(data[:list_length])
+                    data = data[list_length:]
+                it = SelectManyIterator(NativeCheckpointableIterator(lists))
+                self.test_cases.append((f"n={n}, list_length={list_length}, default selector", expected_result, it))
+
+        # custom selector
+        for n in self.lengths:
+            for list_length in [4, 9]:
+                data = list(range(n))
+                expected_result = [item for i, item in enumerate(data) if (i % list_length) == 0]
+                lists = []
+                while data:
+                    lists.append(data[:list_length])
+                    data = data[list_length:]
+                it = SelectManyIterator(NativeCheckpointableIterator(lists), collection_selector=self.custom_selector)
+                self.test_cases.append((f"n={n}, list_length={list_length}, custom selector", expected_result, it))
