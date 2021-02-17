@@ -83,11 +83,6 @@ class TestBase(unittest.TestCase):
         self.assertSetEqual(set(a), set(b))
 
 
-class TestSourceIterator(unittest.TestCase):
-    def test_exception(self):
-        self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
-
-
 class TestBucketedReadaheadBatchIterator(TestBase):
     def txest_basic_functionality(self):
         num_batches = 13

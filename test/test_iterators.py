@@ -531,3 +531,9 @@ class TestWindowedIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterator
                         break
                     expected_result.append(tuple(data[i : i + window_size]))
                 self.test_cases.append((f"n={n}, window_size={window_size}", expected_result, it))
+
+
+class TestSourceIterator(TestBase):
+    # TODO: Do we need more tests for this?
+    def test_exception(self):
+        self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
