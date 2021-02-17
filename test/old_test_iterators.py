@@ -206,18 +206,6 @@ class TestSelectManyIterator(TestBase):
             self.assertListEqual(items0, items1)
 
 
-class TestBufferedShuffleIterator(TestBase):
-    def test_shuffle(self):
-        # work on copy of data in case data is modified by class
-        items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
-        self.assertMultisetEqual(items, self.flattened_test_data)
-
-    def test_shuffle_buffer_size_one(self):
-        # work on copy of data in case data is modified by class
-        items = list(BufferedShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
-        self.assertListEqual(items, self.flattened_test_data)
-
-
 # note: this is also tested in more depth in Test_chunked_dataset_iterator()
 class TestBlockwiseShuffleIterator(TestBase):
     def test_shuffle(self):
