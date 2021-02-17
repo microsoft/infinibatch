@@ -11,7 +11,7 @@ if __name__ == "__main__":
 
 class TestBase(unittest.TestCase):
     def setUp(self):
-        self.lengths = [1, 2, 3, 4, 5, 42, 157, 256, 997]
+        self.lengths = [1, 2, 3, 42, 157, 256]
         self.world_sizes = [1, 2, 3, 4, 5, 11, 16, 128, 255, 774]
         self.seed = 42
 
