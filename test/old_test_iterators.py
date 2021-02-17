@@ -119,15 +119,6 @@ class TestSourceIterator(unittest.TestCase):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
 
 
-class TestNativeCheckpointableIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        self.expected_result = list(range(53))
-        self.iterator = NativeCheckpointableIterator(self.expected_result)
-
-    def test_iterator_exception(self):
-        self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
-
-
 class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
     def setUp(self):
         data = list(range(53))

@@ -394,3 +394,21 @@ class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin):
                 NativeCheckpointableIterator(indices), [NativeCheckpointableIterator(d) for d in data]
             )
             self.test_cases.append((f"n={n}, three source iterators", expected_result, it))
+
+
+class TestNativeCheckpointableIterator(TestBase, TestFiniteIteratorMixin):
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            data = list(range(n))
+            expected_result = copy.deepcopy(data)
+            it = NativeCheckpointableIterator(data)
+            self.test_cases.append((f"n={n}", expected_result, it))
+
+    def test_empty(self):
+        it = NativeCheckpointableIterator([])
+        self.assertRaises(StopIteration, it.__next__)
+
+    def test_iterator_exception(self):
+        self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
