@@ -666,7 +666,7 @@ class WindowedIterator(CheckpointableIterator):
     Yields 'width' consecutive items in a sliding window.
 
     E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
-    [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]
+    [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
     """
     def __init__(self, source_iterator: CheckpointableIterator, width: int):
         """

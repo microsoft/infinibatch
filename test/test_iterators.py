@@ -513,3 +513,21 @@ class TestBlockwiseShuffleIterator(TestBase, TestFiniteIteratorCheckpointingMixi
             with self.subTest(case_name):
                 result = list(it)
                 self.assertMultisetEqual(result, expected_result)
+
+
+class TestWindowedIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            for window_size in self.lengths:
+                if n < window_size:
+                    continue
+                data = list(range(n))
+                it = WindowedIterator(NativeCheckpointableIterator(copy.deepcopy(data)), window_size)
+                expected_result = []
+                for i in range(len(data)):
+                    if i + window_size > len(data):
+                        break
+                    expected_result.append(tuple(data[i : i + window_size]))
+                self.test_cases.append((f"n={n}, window_size={window_size}", expected_result, it))

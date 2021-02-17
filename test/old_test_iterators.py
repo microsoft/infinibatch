@@ -90,21 +90,6 @@ class TestSourceIterator(unittest.TestCase):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
 
 
-class TestWindowedIterator(TestBase):
-    def test(self):
-        for n in [0, 2, 3, 8, 9, 10, 11, 12]:  # cover various boundary conditions
-            seq = list(range(n))
-            it = WindowedIterator(NativeCheckpointableIterator(seq), 3)
-            actual0 = list(itertools.islice(it, n * 3 // 10))
-            checkpoint = it.getstate()
-            actual1a = list(it)
-            it.setstate(checkpoint)
-            actual1b = list(it)
-            actual = actual0 + actual1a
-            expected = list(zip(seq, itertools.islice(seq, 1, None), itertools.islice(seq, 2, None)))
-            self.assertListEqual(actual, expected)  # basic operation
-            self.assertListEqual(actual1a, actual1b)  # checkpointing
-
 
 class TestRandomIterator(TestBase):
     def test(self):
