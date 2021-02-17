@@ -343,3 +343,17 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin):
                 it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
                 self.test_cases.append((f"n={n}, different lengths", expected_result, it))
 
+
+class TestPrefetchIterator(TestBase, TestFiniteIteratorMixin):
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            for buffer_size in [42]:  # TODO: Add more buffer sizes after implementing lazy init for prefetcher
+                data = list(range(n))
+                it = PrefetchIterator(NativeCheckpointableIterator(data), buffer_size)
+                self.test_cases.append((f"n={n}, buffer_size={buffer_size}", data, it))
+
+    def test_zero_buffer_size(self):
+        f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0)
+        self.assertRaises(ValueError, f)

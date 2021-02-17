@@ -285,13 +285,6 @@ class TestRandomIterator(TestBase):
         self.assertListEqual(items1a, items1b)
 
 
-class TestPrefetchIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        self.expected_result = list(range(53))
-        source_iterator = NativeCheckpointableIterator(self.expected_result)
-        self.iterator = PrefetchIterator(source_iterator, buffer_size=13)
-
-
 class Test_chunked_dataset_iterator(TestBase):
     def test_no_shuffle(self):
         items = list(

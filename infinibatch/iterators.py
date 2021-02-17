@@ -899,6 +899,8 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, multiprocessing_module):
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
+        if buffer_size <= 0:
+            raise ValueError('buffer_size must be positive')
         self._source_iterator = source_iterator  # type:CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
         self._QueueType = multiprocessing_module.Queue if multiprocessing_module else  \
@@ -972,7 +974,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         self._terminate_and_join_prefetch_process()
 
     def _terminate_and_join_prefetch_process(self):  # terminate the pre-fetch process if one is running
-        if self._prefetch_process:
+        if hasattr(self, "_prefetch_process") and self._prefetch_process:
             _ForkPrefetchIterator._join_process(self._prefetch_process)
         self._prefetch_process = None
 
