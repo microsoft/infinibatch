@@ -114,16 +114,6 @@ class TestBase(unittest.TestCase):
         self.assertSetEqual(set(a), set(b))
 
 
-class TestMultiplexIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        index_seq = [0, 2, 1, 2, 0, 1, 1]
-        data_seqs = [[0.0, 0.1, 0.2, 0.3], [1.0, 1.1, 1.2, 1.3], [2.0, 2.1, 2.2, 2.3]]
-        self.expected_result = [0.0, 2.0, 1.0, 2.1, 0.1, 1.1, 1.2]
-        self.iterator = MultiplexIterator(
-            NativeCheckpointableIterator(index_seq), [NativeCheckpointableIterator(ds) for ds in data_seqs]
-        )
-
-
 class TestSourceIterator(unittest.TestCase):
     def test_exception(self):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)

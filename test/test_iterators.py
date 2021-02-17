@@ -317,12 +317,16 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin):
     def setUp(self):
         super().setUp()
         self.test_cases = []
+
+        # pairs
         for n in self.lengths:
             data1 = list(range(n))
             data2 = [item * item for item in data1]
             expected_result = list(zip(data1, data2))
             it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
             self.test_cases.append((f"n={n}, pairs", expected_result, it))
+
+        # triples
         for n in self.lengths:
             data1 = list(range(n))
             data2 = [item * item for item in data1]
@@ -334,6 +338,8 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin):
                 NativeCheckpointableIterator(data3),
             )
             self.test_cases.append((f"n={n}, triples", expected_result, it))
+
+        # different lengths
         for n in self.lengths:
             if n > 3:  # smaller n give us an empty iterator, which causes issues
                 data1 = list(range(n))
@@ -357,3 +363,34 @@ class TestPrefetchIterator(TestBase, TestFiniteIteratorMixin):
     def test_zero_buffer_size(self):
         f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0)
         self.assertRaises(ValueError, f)
+
+
+class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin):
+    # TODO: Add test cases for behavior when source iterators end but item is retrieved
+    def setUp(self):
+        super().setUp()
+        random = Random()
+        random.seed(42)
+        self.test_cases = []
+
+        # two source iterators
+        for n in self.lengths:
+            indices = [random.randrange(0, 2) for _ in range(n)]
+            data = [[2 * i + 0 for i in range(n)], [2 * i + 1 for i in range(n)]]
+            data_copy = copy.deepcopy(data)
+            expected_result = [data_copy[i].pop(0) for i in indices]
+            it = MultiplexIterator(
+                NativeCheckpointableIterator(indices), [NativeCheckpointableIterator(d) for d in data]
+            )
+            self.test_cases.append((f"n={n}, two source iterators", expected_result, it))
+
+        # three source iterators
+        for n in self.lengths:
+            indices = [random.randrange(0, 3) for _ in range(n)]
+            data = [[3 * i + 0 for i in range(n)], [3 * i + 1 for i in range(n)], [3 * i + 2 for i in range(n)]]
+            data_copy = copy.deepcopy(data)
+            expected_result = [data_copy[i].pop(0) for i in indices]
+            it = MultiplexIterator(
+                NativeCheckpointableIterator(indices), [NativeCheckpointableIterator(d) for d in data]
+            )
+            self.test_cases.append((f"n={n}, three source iterators", expected_result, it))
