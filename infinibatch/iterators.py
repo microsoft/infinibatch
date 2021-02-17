@@ -722,7 +722,7 @@ class FixedBatchIterator(CheckpointableIterator):
     Batches N consecutive items into a single item that is a list of these items.
 
     E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
-    [(1, 2, 3), (4, 5, 6), (7, 8)]
+    [[1, 2, 3], [4, 5, 6], [7, 8]]
     """
     def __init__(self, source_iterator: CheckpointableIterator, batch_size: int):
         """
@@ -732,6 +732,8 @@ class FixedBatchIterator(CheckpointableIterator):
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
+        if batch_size <= 0:
+            raise ValueError('batch_size has to be positive')
         self._source_iterator = source_iterator  # type: CheckpointableIterator
         self._batch_size = batch_size            # type: int
         self.setstate(None)

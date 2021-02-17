@@ -135,16 +135,6 @@ class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
         self.iterator = RecurrentIterator(NativeCheckpointableIterator(data), step_function, initial_state=0)
 
 
-class TestFixedBatchIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        data = list(range(5))
-
-        batch_size = 3
-        self.expected_result = [data[0:3], data[3:]]
-
-        self.iterator = FixedBatchIterator(NativeCheckpointableIterator(data), batch_size=batch_size)
-
-
 class TestSelectManyIterator(TestBase):
     # in this test, SelectManyIterator is used to read chunk files
     @staticmethod

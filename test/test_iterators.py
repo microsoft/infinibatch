@@ -412,3 +412,23 @@ class TestNativeCheckpointableIterator(TestBase, TestFiniteIteratorMixin):
 
     def test_iterator_exception(self):
         self.assertRaises(ValueError, NativeCheckpointableIterator, iter(range(10)))
+
+
+class TestFixedBatchIterator(TestBase, TestFiniteIteratorMixin):
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            for batch_size in self.lengths:
+                data = list(range(n))
+                data_copy = copy.deepcopy(data)
+                expected_result = []
+                while data_copy:
+                    expected_result.append(data_copy[:batch_size])
+                    data_copy = data_copy[batch_size:]
+                it = FixedBatchIterator(NativeCheckpointableIterator(data), batch_size=batch_size)
+                self.test_cases.append((f"n={n}, batch_size={batch_size}", expected_result, it))
+
+    def test_invalid_batch_size(self):
+        f = lambda: FixedBatchIterator(NativeCheckpointableIterator([0]), batch_size=0)
+        self.assertRaises(ValueError, f)
