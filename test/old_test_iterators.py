@@ -119,22 +119,6 @@ class TestSourceIterator(unittest.TestCase):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
 
 
-class TestRecurrentIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        data = list(range(53))
-
-        self.expected_result = [0]
-        for i in data[1:]:
-            self.expected_result.append(self.expected_result[-1] + i)
-
-        def step_function(prev_state, item):
-            output = item + prev_state
-            new_state = output
-            return new_state, output
-
-        self.iterator = RecurrentIterator(NativeCheckpointableIterator(data), step_function, initial_state=0)
-
-
 class TestSelectManyIterator(TestBase):
     # in this test, SelectManyIterator is used to read chunk files
     @staticmethod

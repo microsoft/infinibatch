@@ -432,3 +432,21 @@ class TestFixedBatchIterator(TestBase, TestFiniteIteratorMixin):
     def test_invalid_batch_size(self):
         f = lambda: FixedBatchIterator(NativeCheckpointableIterator([0]), batch_size=0)
         self.assertRaises(ValueError, f)
+
+
+class TestRecurrentIterator(TestBase, TestFiniteIteratorMixin):
+    @staticmethod
+    def step_function(prev_state, item):
+        output = prev_state + item
+        return output, output
+
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            data = list(range(n))
+            expected_result = [data[0]]
+            for i in data[1:]:
+                expected_result.append(self.step_function(expected_result[-1], i)[1])
+            it = RecurrentIterator(NativeCheckpointableIterator(data), self.step_function, initial_state=0)
+            self.test_cases.append((f"n={n}", expected_result, it))
