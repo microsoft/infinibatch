@@ -41,35 +41,6 @@ from infinibatch.datasets import chunked_dataset_iterator
 #  - test whether iterators give same result when running from start twice (is seed reset correctly?)
 
 
-class TestCheckpointableIterator:
-    """
-    These are common test cases for CheckointableIterators
-    
-    Inherit from this class and set self.iterator and self.expected_result in the setUp function to use.
-    """
-
-    def test_basic(self):
-        self.assertListEqual(list(self.iterator), self.expected_result)
-
-    def test_checkpointing_from_start(self):
-        for _ in range(len(self.expected_result)):
-            next(self.iterator)
-        self.iterator.setstate(None)
-        self.assertListEqual(list(self.iterator), self.expected_result)
-
-    def test_checkpointing_in_middle(self):
-        result = [next(self.iterator) for _ in range(len(self.expected_result) // 3)]
-        self.iterator.setstate(self.iterator.getstate())
-        result += [item for item in self.iterator]
-        self.assertListEqual(result, self.expected_result)
-
-    def test_checkpointing_at_end(self):
-        for _ in range(len(self.expected_result)):
-            next(self.iterator)
-        self.iterator.setstate(self.iterator.getstate())
-        self.assertRaises(StopIteration, self.iterator.__next__)
-
-
 class TestBase(unittest.TestCase):
     def setUp(self):
         self.test_data = [
@@ -191,13 +162,6 @@ class TestBlockwiseShuffleIterator(TestBase):
         # work on copy of data in case data is modified by class
         items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
         self.assertListEqual(items, self.flattened_test_data)
-
-
-class TestParallelMapIterator(unittest.TestCase, TestCheckpointableIterator):
-    def setUp(self):
-        data = list(range(53))
-        self.expected_result = [map_fun(n) for n in data]
-        self.iterator = ParallelMapIterator(NativeCheckpointableIterator(data), map_fun, 5, 7)
 
 
 class TestWindowedIterator(TestBase):
