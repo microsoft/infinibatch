@@ -90,19 +90,6 @@ class TestSourceIterator(unittest.TestCase):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
 
 
-
-class TestRandomIterator(TestBase):
-    def test(self):
-        n = 100
-        it = RandomIterator(seed=1)
-        _ = list(itertools.islice(it, n * 3 // 10))
-        checkpoint = it.getstate()
-        items1a = list(itertools.islice(it, n * 7 // 10))
-        it.setstate(checkpoint)
-        items1b = list(itertools.islice(it, n * 7 // 10))
-        self.assertListEqual(items1a, items1b)
-
-
 class Test_chunked_dataset_iterator(TestBase):
     def test_no_shuffle(self):
         items = list(
