@@ -29,8 +29,6 @@ from infinibatch.iterators import (
     PrefetchIterator,
     MultiplexIterator,
 )
-from infinibatch.datasets import chunked_dataset_iterator
-
 
 # TODO:
 #  - make sure that all iterators can be reset to a checkpoint even after they were exhausted
@@ -88,76 +86,6 @@ class TestBase(unittest.TestCase):
 class TestSourceIterator(unittest.TestCase):
     def test_exception(self):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
-
-
-class Test_chunked_dataset_iterator(TestBase):
-    def test_no_shuffle(self):
-        items = list(
-            itertools.islice(
-                chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000),
-                len(self.flattened_test_data),
-            )
-        )
-        self.assertListEqual(items, self.flattened_test_data)
-
-    def test_other_files_present(self):
-        with open(os.path.join(self.data_dir, "i_do_not_belong_here.txt"), "w") as f:
-            f.write("really ...")
-        items = list(
-            itertools.islice(
-                chunked_dataset_iterator(self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000),
-                len(self.flattened_test_data),
-            )
-        )
-        self.assertListEqual(items, self.flattened_test_data)
-
-    def test_transform(self):
-        transform = lambda s: s + "!"
-        modified_test_data = [transform(s) for s in self.flattened_test_data]
-        items = list(
-            itertools.islice(
-                chunked_dataset_iterator(
-                    self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000, transform=transform
-                ),
-                len(self.flattened_test_data),
-            )
-        )
-        self.assertListEqual(items, modified_test_data)
-
-    def test_two_instances(self):
-        dataset0 = chunked_dataset_iterator(
-            self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000, num_instances=2, instance_rank=0
-        )
-        dataset1 = chunked_dataset_iterator(
-            self.chunk_file_paths, self.read_chunk, shuffle=False, buffer_size=1000, num_instances=2, instance_rank=1
-        )
-        items0 = list(itertools.islice(dataset0, len(self.test_data[0]) + len(self.test_data[2])))
-        items1 = list(itertools.islice(dataset1, len(self.test_data[1]) + len(self.test_data[3])))
-        self.assertMultisetEqual(set(items0 + items1), self.flattened_test_data)
-
-    def test_checkpointing(self):
-        random = Random(1)
-        for use_windowed in (True, False):
-            for i in range(2):
-                first_length = random.randrange(11, 21)
-                extra_length = random.randrange(11, 21)
-                dataset = chunked_dataset_iterator(
-                    self.chunk_file_paths,
-                    self.read_chunk,
-                    shuffle=(i % 2 == 0),
-                    buffer_size=1000,
-                    seed=i,
-                    num_instances=2,
-                    instance_rank=0,
-                    use_windowed=use_windowed,
-                )
-                for _ in range(first_length):
-                    next(dataset)
-                checkpoint = dataset.getstate()
-                items1 = list(itertools.islice(dataset, extra_length))
-                dataset.setstate(checkpoint)
-                items2 = list(itertools.islice(dataset, extra_length))
-                self.assertListEqual(items1, items2)
 
 
 class TestBucketedReadaheadBatchIterator(TestBase):
