@@ -90,19 +90,6 @@ class TestSourceIterator(unittest.TestCase):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
 
 
-# note: this is also tested in more depth in Test_chunked_dataset_iterator()
-class TestBlockwiseShuffleIterator(TestBase):
-    def test_shuffle(self):
-        # work on copy of data in case data is modified by class
-        items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 971, 42))
-        self.assertMultisetEqual(items, self.flattened_test_data)
-
-    def test_shuffle_buffer_size_one(self):
-        # work on copy of data in case data is modified by class
-        items = list(BlockwiseShuffleIterator(NativeCheckpointableIterator(self.flattened_test_data.copy()), 1, 42))
-        self.assertListEqual(items, self.flattened_test_data)
-
-
 class TestWindowedIterator(TestBase):
     def test(self):
         for n in [0, 2, 3, 8, 9, 10, 11, 12]:  # cover various boundary conditions
