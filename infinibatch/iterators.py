@@ -1066,6 +1066,8 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     def _terminate_and_join_queue_fetcher_thread(self):
         self._queue_fetcher_thread_running = False  # signal thread to halt
         if self._queue_fetcher_thread is not None:
+            while not self._local_queue.empty():
+                self._local_queue.get()
             self._queue_fetcher_thread.join()
         self._queue_fetcher_thread = None
 
