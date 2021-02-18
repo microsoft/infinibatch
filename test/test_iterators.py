@@ -537,3 +537,99 @@ class TestSourceIterator(TestBase):
     # TODO: Do we need more tests for this?
     def test_exception(self):
         self.assertRaises(ValueError, create_source_iterator, [1], train=False, shuffle=True)
+
+
+class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointingMixin):
+    dynamic_batch_size = 15
+
+    @staticmethod
+    def key_fn(item):
+        return len(item)
+
+    @staticmethod
+    def batch_size_fn(item):
+        return TestBucketedReadaheadBatchIterator.dynamic_batch_size // len(item)
+
+    @staticmethod
+    def setup_data(n):
+        data = []
+        for i in range(n):
+            data.append(tuple(range(i % 10 + 1)))
+        return data
+
+    def setUp(self):
+        super().setUp()
+        self.batch_sizes = [1, 2, 3, 9]
+        self.test_cases = []
+
+        # fixed batch size, not shuffled
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            for batch_size in self.batch_sizes:
+                data = self.setup_data(n)
+                it = BucketedReadaheadBatchIterator(
+                    NativeCheckpointableIterator(copy.deepcopy(data)),
+                    read_ahead=read_ahead,
+                    key=self.key_fn,
+                    batch_size=batch_size,
+                    shuffle=False,
+                )
+                self.test_cases.append(
+                    (f"n={n}, read_ahead={read_ahead}, batch_size={batch_size}, shuffled=False", data, it)
+                )
+
+        # fixed batch size, shuffled
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            for batch_size in self.batch_sizes:
+                data = self.setup_data(n)
+                it = BucketedReadaheadBatchIterator(
+                    NativeCheckpointableIterator(copy.deepcopy(data)),
+                    read_ahead=read_ahead,
+                    key=self.key_fn,
+                    batch_size=batch_size,
+                    shuffle=True,
+                    seed=self.seed,
+                )
+                self.test_cases.append(
+                    (f"n={n}, read_ahead={read_ahead}, batch_size={batch_size}, shuffled=True", data, it)
+                )
+
+        # dynamic batch size, not shuffled
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            data = self.setup_data(n)
+            it = BucketedReadaheadBatchIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)),
+                read_ahead=read_ahead,
+                key=self.key_fn,
+                batch_size=self.batch_size_fn,
+                shuffle=False,
+            )
+            self.test_cases.append((f"n={n}, read_ahead={read_ahead}, batch_size=dynamic, shuffled=False", data, it))
+
+        # dynamic batch size, shuffled
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            data = self.setup_data(n)
+            it = BucketedReadaheadBatchIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)),
+                read_ahead=read_ahead,
+                key=self.key_fn,
+                batch_size=self.batch_size_fn,
+                shuffle=True,
+                seed=self.seed,
+            )
+            self.test_cases.append((f"n={n}, read_ahead={read_ahead}, batch_size=dynamic, shuffled=True", data, it))
+
+    def test_basic(self):
+        for case_name, expected_result, it in self.test_cases:
+            with self.subTest(case_name):
+                result = list(it)
+                flattened_result = [item for batch in result for item in batch]
+                self.assertMultisetEqual(flattened_result, expected_result)
+
+    def test_max_len(self):
+        for case_name, expected_result, it in self.test_cases:
+            if "batch_size=dynamic" in case_name:
+                with self.subTest(case_name):
+                    result = list(it)
+                    for batch in result:
+                        length = sum((len(item) for item in batch))
+                        self.assertTrue(length <= TestBucketedReadaheadBatchIterator.dynamic_batch_size)
