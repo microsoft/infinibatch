@@ -19,7 +19,7 @@ jobs:
           pip install pdoc3
           pdoc -o docs --template-dir docs --html infinibatch
       - name: Deploy Documentation
-        uses: JamesIves/github-pages-deploy-action@3.5.9
+        uses: JamesIves/github-pages-deploy-action@4.0.0
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages
