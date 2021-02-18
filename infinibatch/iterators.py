@@ -340,13 +340,16 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
         num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
     """
-    # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
-    chunk_size = math.ceil(len(source_items) / num_instances)
-    # this does not cause any out-of-bounds issues:
-    # a slice with a start-index beyong the end of the list is empty,
-    # and an end-index of a slice is capped at the end of the list
-    chunk = source_items[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
-    return NativeCheckpointableIterator(chunk)
+    if instance_rank >= num_instances:
+        raise ValueError("invalid instance_rank")
+    # we split the data into num_instances consecutive parts
+    # that differ by at most 1 in size
+    num_items_per_rank = len(source_items) // num_instances
+    ranks_with_additional_item = len(source_items) - num_instances * num_items_per_rank
+    def boundary(rank):
+        return rank * num_items_per_rank + min(rank, ranks_with_additional_item)
+    items = source_items[boundary(instance_rank):boundary(instance_rank + 1)]
+    return NativeCheckpointableIterator(items)
 
 
 class InfinitePermutationSourceIterator(CheckpointableIterator):
@@ -369,11 +372,13 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
             num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         """
+        if not source_items:
+            raise ValueError("source must not be empty")
         self._source_items = source_items
-        if not self._source_items:
-            raise ValueError("InfinitePermutationIterator: source must not be empty")
         self._shuffle = shuffle
         self._seed = seed
+        if instance_rank >= num_instances:
+            raise ValueError("invalid instance_rank")
         self._num_instances = num_instances
         self._instance_rank = instance_rank
         self.setstate(None)
@@ -661,7 +666,7 @@ class WindowedIterator(CheckpointableIterator):
     Yields 'width' consecutive items in a sliding window.
 
     E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
-    [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]
+    [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
     """
     def __init__(self, source_iterator: CheckpointableIterator, width: int):
         """
@@ -717,7 +722,7 @@ class FixedBatchIterator(CheckpointableIterator):
     Batches N consecutive items into a single item that is a list of these items.
 
     E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
-    [(1, 2, 3), (4, 5, 6), (7, 8)]
+    [[1, 2, 3], [4, 5, 6], [7, 8]]
     """
     def __init__(self, source_iterator: CheckpointableIterator, batch_size: int):
         """
@@ -727,6 +732,8 @@ class FixedBatchIterator(CheckpointableIterator):
         """
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError('source_iterator has to be a CheckpointableIterator')
+        if batch_size <= 0:
+            raise ValueError('batch_size has to be positive')
         self._source_iterator = source_iterator  # type: CheckpointableIterator
         self._batch_size = batch_size            # type: int
         self.setstate(None)
@@ -871,6 +878,11 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, 
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
         multiprocessing: module to get `Queue` type from. Pass torch.multiprocessing here when items are Torch tensors for optimized data transfer.
     """
+    if not isinstance(source_iterator, CheckpointableIterator):
+        raise ValueError('source_iterator has to be a CheckpointableIterator')
+    if buffer_size <= 0:
+        raise ValueError('buffer_size must be positive')
+
     if python_multiprocessing.get_start_method() != 'fork':
         print('WARNING: \
                PrefetchIterator is only supported on operating system that use fork to create new processes.\
@@ -892,8 +904,6 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         multiprocessing_module: use this in place of Python's multiprocessing module, to allow for using torch.multiprocessing.Queue
     """
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, multiprocessing_module):
-        if not isinstance(source_iterator, CheckpointableIterator):
-            raise ValueError('source_iterator has to be a CheckpointableIterator')
         self._source_iterator = source_iterator  # type:CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
         self._QueueType = multiprocessing_module.Queue if multiprocessing_module else  \
@@ -967,7 +977,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         self._terminate_and_join_prefetch_process()
 
     def _terminate_and_join_prefetch_process(self):  # terminate the pre-fetch process if one is running
-        if self._prefetch_process:
+        if hasattr(self, "_prefetch_process") and self._prefetch_process:
             _ForkPrefetchIterator._join_process(self._prefetch_process)
         self._prefetch_process = None
 
