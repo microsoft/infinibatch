@@ -875,14 +875,14 @@ def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size
     return samples
 
 
-def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, log_empty_queue_warning: bool=False):
+def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, log_empty_buffer_warning: bool=False):
     """
     An iterator prefetching data into a buffer on a seperate process.
 
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
-        log_empty_queue_warning: log warning message if prefetch buffer is empty
+        log_empty_buffer_warning: log warning message if prefetch buffer is empty
     """
     if not isinstance(source_iterator, CheckpointableIterator):
         raise ValueError('source_iterator has to be a CheckpointableIterator')
@@ -897,7 +897,7 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, 
                This also means that checkpoints of this iterator pipeline cannot be ported to a system that uses fork.')
         return source_iterator
     else:
-        return _ForkPrefetchIterator(source_iterator, buffer_size, log_empty_queue_warning)
+        return _ForkPrefetchIterator(source_iterator, buffer_size, log_empty_buffer_warning)
 
 
 class _ForkPrefetchIterator(CheckpointableIterator):
@@ -907,7 +907,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
-        log_empty_queue_warning: log warning message if prefetch buffer is empty
+        log_empty_buffer_warning: log warning message if prefetch buffer is empty
     """
 
     # HOW THIS ITERATOR WORKS, AND WHY:
@@ -958,10 +958,10 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     # https://bugs.python.org/issue7946
     # https://in.pycon.org/2011/static/files/talks/41/Python-threads_v1.0.pdf
 
-    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, log_empty_queue_warning: bool=False):
+    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, log_empty_buffer_warning: bool=False):
         self._source_iterator = source_iterator  # type: CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
-        self._log_empty_queue_warning = log_empty_queue_warning
+        self._log_empty_buffer_warning = log_empty_buffer_warning
         self._prefetch_process = None            # type: Optional[multiprocessing.Process]
         self._queue_fetcher_thread = None
         self._queue_fetcher_thread_running = False
@@ -1031,7 +1031,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     def __next__(self):
         if self._prefetch_process is None:  # iterator has already been exhausted
             raise StopIteration()
-        if self._log_empty_queue_warning:
+        if self._log_empty_buffer_warning:
             import logging
             logger = logging.getLogger(__name__)
             if self._local_queue.empty():
