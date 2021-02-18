@@ -172,7 +172,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
 
     def test_no_shuffle(self):
         for n, k in itertools.product(self.lengths, self.repeats):
-            with self.subTest(f"n={n}, k={k}"):
+            with self.subTest("n={}, k={}".format(n, k)):
                 data = list(range(n))
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data), shuffle=False)
                 result = [next(it) for _ in range(k * n)]
@@ -180,7 +180,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
 
     def test_shuffle(self):
         for n, k in itertools.product(self.lengths, self.repeats):
-            with self.subTest(f"n={n}, k={k}"):
+            with self.subTest("n={}, k={}".format(n, k)):
                 data = list(range(n))
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data))
                 result = [next(it) for _ in range(k * n)]
@@ -188,7 +188,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
 
     def test_checkpointing_from_start(self):
         for n, k in itertools.product(self.lengths, self.repeats):
-            with self.subTest(f"n={n}, k={k}"):
+            with self.subTest("n={}, k={}".format(n, k)):
                 data = list(range(n))
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data))
                 expected_result = [next(it) for _ in range(k * n)]  # extract data
@@ -198,7 +198,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
 
     def test_checkpointing_from_middle(self):
         for n, k in itertools.product(self.lengths, self.repeats):
-            with self.subTest(f"n={n}, k={k}"):
+            with self.subTest("n={}, k={}".format(n, k)):
                 data = list(range(n))
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data))
                 checkpoint_pos = k * n // 3
@@ -214,7 +214,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
 
     def test_checkpointing_at_boundary(self):
         for n, k in itertools.product(self.lengths, self.repeats):
-            with self.subTest(f"n={n}, k={k}"):
+            with self.subTest("n={}, k={}".format(n, k)):
                 data = list(range(n))
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data))
                 checkpoint_pos = k * n
@@ -268,11 +268,11 @@ class TestChunkedSourceIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIte
         for n in self.lengths:
             data = list(range(n))
             it = ChunkedSourceIterator(copy.deepcopy(data))
-            self.test_cases.append((f"n={n}", data, it))
+            self.test_cases.append(("n={}".format(n), data, it))
 
     def test_multiple_instances(self):
         for n, num_instances in itertools.product(self.lengths, self.world_sizes):
-            with self.subTest(f"n={n}, num_instances={num_instances}"):
+            with self.subTest("n={}, num_instances={}".format(n, num_instances)):
                 data = list(range(n))
                 result = []
                 sizes = []
@@ -307,7 +307,7 @@ class TestSamplingRandomMapIterator(TestBase, TestFiniteIteratorMixin, TestFinit
             random.seed(self.seed)
             expected_result = [n + random.random() for n in data]
             it = SamplingRandomMapIterator(NativeCheckpointableIterator(data), transform=self.transform, seed=self.seed)
-            self.test_cases.append((f"n={n}", expected_result, it))
+            self.test_cases.append(("n={}".format(n), expected_result, it))
 
 
 class TestMapIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
@@ -322,7 +322,7 @@ class TestMapIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheck
             data = list(range(n))
             expected_result = [self.transform(item) for item in data]
             it = MapIterator(NativeCheckpointableIterator(data), self.transform)
-            self.test_cases.append((f"n={n}", expected_result, it))
+            self.test_cases.append(("n={}".format(n), expected_result, it))
 
 
 class TestZipIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
@@ -336,7 +336,7 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheck
             data2 = [item * item for item in data1]
             expected_result = list(zip(data1, data2))
             it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
-            self.test_cases.append((f"n={n}, pairs", expected_result, it))
+            self.test_cases.append(("n={}, pairs".format(n), expected_result, it))
 
         # triples
         for n in self.lengths:
@@ -349,7 +349,7 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheck
                 NativeCheckpointableIterator(data2),
                 NativeCheckpointableIterator(data3),
             )
-            self.test_cases.append((f"n={n}, triples", expected_result, it))
+            self.test_cases.append(("n={}, triples".format(n), expected_result, it))
 
         # different lengths
         for n in self.lengths:
@@ -359,7 +359,7 @@ class TestZipIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheck
                 data2 = data2[:-3]
                 expected_result = list(zip(data1, data2))
                 it = ZipIterator(NativeCheckpointableIterator(data1), NativeCheckpointableIterator(data2))
-                self.test_cases.append((f"n={n}, different lengths", expected_result, it))
+                self.test_cases.append(("n={}, different lengths".format(n), expected_result, it))
 
 
 class TestPrefetchIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
@@ -370,7 +370,7 @@ class TestPrefetchIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterator
             for buffer_size in [42]:  # TODO: Add more buffer sizes after implementing lazy init for prefetcher
                 data = list(range(n))
                 it = PrefetchIterator(NativeCheckpointableIterator(data), buffer_size)
-                self.test_cases.append((f"n={n}, buffer_size={buffer_size}", data, it))
+                self.test_cases.append(("n={}, buffer_size={}".format(n, buffer_size), data, it))
 
     def test_zero_buffer_size(self):
         f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0)
@@ -394,7 +394,7 @@ class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterato
             it = MultiplexIterator(
                 NativeCheckpointableIterator(indices), [NativeCheckpointableIterator(d) for d in data]
             )
-            self.test_cases.append((f"n={n}, two source iterators", expected_result, it))
+            self.test_cases.append(("n={}, two source iterators".format(n), expected_result, it))
 
         # three source iterators
         for n in self.lengths:
@@ -405,7 +405,7 @@ class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterato
             it = MultiplexIterator(
                 NativeCheckpointableIterator(indices), [NativeCheckpointableIterator(d) for d in data]
             )
-            self.test_cases.append((f"n={n}, three source iterators", expected_result, it))
+            self.test_cases.append(("n={}, three source iterators".format(n), expected_result, it))
 
 
 class TestNativeCheckpointableIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
@@ -416,7 +416,7 @@ class TestNativeCheckpointableIterator(TestBase, TestFiniteIteratorMixin, TestFi
             data = list(range(n))
             expected_result = copy.deepcopy(data)
             it = NativeCheckpointableIterator(data)
-            self.test_cases.append((f"n={n}", expected_result, it))
+            self.test_cases.append(("n={}".format(n), expected_result, it))
 
     def test_empty(self):
         it = NativeCheckpointableIterator([])
@@ -439,7 +439,7 @@ class TestFixedBatchIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterat
                     expected_result.append(data_copy[:batch_size])
                     data_copy = data_copy[batch_size:]
                 it = FixedBatchIterator(NativeCheckpointableIterator(data), batch_size=batch_size)
-                self.test_cases.append((f"n={n}, batch_size={batch_size}", expected_result, it))
+                self.test_cases.append(("n={}, batch_size={}".format(n, batch_size), expected_result, it))
 
     def test_invalid_batch_size(self):
         f = lambda: FixedBatchIterator(NativeCheckpointableIterator([0]), batch_size=0)
@@ -461,7 +461,7 @@ class TestRecurrentIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterato
             for i in data[1:]:
                 expected_result.append(self.step_function(expected_result[-1], i)[1])
             it = RecurrentIterator(NativeCheckpointableIterator(data), self.step_function, initial_state=0)
-            self.test_cases.append((f"n={n}", expected_result, it))
+            self.test_cases.append(("n={}".format(n), expected_result, it))
 
 
 class TestSelectManyIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
@@ -483,7 +483,9 @@ class TestSelectManyIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterat
                     lists.append(data[:list_length])
                     data = data[list_length:]
                 it = SelectManyIterator(NativeCheckpointableIterator(lists))
-                self.test_cases.append((f"n={n}, list_length={list_length}, default selector", expected_result, it))
+                self.test_cases.append(
+                    ("n={}, list_length={}, default selector".format(n, list_length), expected_result, it)
+                )
 
         # custom selector
         for n in self.lengths:
@@ -495,7 +497,9 @@ class TestSelectManyIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterat
                     lists.append(data[:list_length])
                     data = data[list_length:]
                 it = SelectManyIterator(NativeCheckpointableIterator(lists), collection_selector=self.custom_selector)
-                self.test_cases.append((f"n={n}, list_length={list_length}, custom selector", expected_result, it))
+                self.test_cases.append(
+                    ("n={}, list_length={}, custom selector".format(n, list_length), expected_result, it)
+                )
 
 
 class TestBlockwiseShuffleIterator(TestBase, TestFiniteIteratorCheckpointingMixin):
@@ -506,7 +510,7 @@ class TestBlockwiseShuffleIterator(TestBase, TestFiniteIteratorCheckpointingMixi
             for block_size in self.lengths:
                 data = list(range(n))
                 it = BlockwiseShuffleIterator(NativeCheckpointableIterator(copy.deepcopy(data)), block_size, self.seed)
-                self.test_cases.append((f"n={n}, block_size={block_size}", data, it))
+                self.test_cases.append(("n={}, block_size={}".format(n, block_size), data, it))
 
     def test_basic(self):
         for case_name, expected_result, it in self.test_cases:
@@ -530,7 +534,7 @@ class TestWindowedIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterator
                     if i + window_size > len(data):
                         break
                     expected_result.append(tuple(data[i : i + window_size]))
-                self.test_cases.append((f"n={n}, window_size={window_size}", expected_result, it))
+                self.test_cases.append(("n={}, window_size={}".format(n, window_size), expected_result, it))
 
 
 class TestSourceIterator(TestBase):
@@ -574,7 +578,7 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                     shuffle=False,
                 )
                 self.test_cases.append(
-                    (f"n={n}, read_ahead={read_ahead}, batch_size={batch_size}, shuffled=False", data, it)
+                    ("n={}, read_ahead={}, batch_size={}, shuffled=False".format(n, read_ahead, batch_size), data, it)
                 )
 
         # fixed batch size, shuffled
@@ -590,7 +594,7 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                     seed=self.seed,
                 )
                 self.test_cases.append(
-                    (f"n={n}, read_ahead={read_ahead}, batch_size={batch_size}, shuffled=True", data, it)
+                    ("n={}, read_ahead={}, batch_size={}, shuffled=True".format(n, read_ahead, batch_size), data, it)
                 )
 
         # dynamic batch size, not shuffled
@@ -603,7 +607,9 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                 batch_size=self.batch_size_fn,
                 shuffle=False,
             )
-            self.test_cases.append((f"n={n}, read_ahead={read_ahead}, batch_size=dynamic, shuffled=False", data, it))
+            self.test_cases.append(
+                ("n={}, read_ahead={}, batch_size=dynamic, shuffled=False".format(n, read_ahead), data, it)
+            )
 
         # dynamic batch size, shuffled
         for n, read_ahead in itertools.product(self.lengths, self.lengths):
@@ -616,7 +622,9 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                 shuffle=True,
                 seed=self.seed,
             )
-            self.test_cases.append((f"n={n}, read_ahead={read_ahead}, batch_size=dynamic, shuffled=True", data, it))
+            self.test_cases.append(
+                ("n={}, read_ahead={}, batch_size=dynamic, shuffled=True".format(n, read_ahead), data, it)
+            )
 
     def test_basic(self):
         for case_name, expected_result, it in self.test_cases:
