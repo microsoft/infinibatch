@@ -875,13 +875,14 @@ def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size
     return samples
 
 
-def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int):
+def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, log_empty_queue_warning: bool=False):
     """
     An iterator prefetching data into a buffer on a seperate process.
 
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
+        log_empty_queue_warning: log warning message if prefetch buffer is empty
     """
     if not isinstance(source_iterator, CheckpointableIterator):
         raise ValueError('source_iterator has to be a CheckpointableIterator')
@@ -896,11 +897,8 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int):
                This also means that checkpoints of this iterator pipeline cannot be ported to a system that uses fork.')
         return source_iterator
     else:
-        return _ForkPrefetchIterator(source_iterator, buffer_size)
+        return _ForkPrefetchIterator(source_iterator, buffer_size, log_empty_queue_warning)
 
-# TODO:
-# - debugging facilities
-# - make process / thread start-up lazy?
 
 class _ForkPrefetchIterator(CheckpointableIterator):
     """
@@ -909,6 +907,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
+        log_empty_queue_warning: log warning message if prefetch buffer is empty
     """
 
     # HOW THIS ITERATOR WORKS, AND WHY:
@@ -959,9 +958,10 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     # https://bugs.python.org/issue7946
     # https://in.pycon.org/2011/static/files/talks/41/Python-threads_v1.0.pdf
 
-    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int):
+    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, log_empty_queue_warning: bool=False):
         self._source_iterator = source_iterator  # type: CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
+        self._log_empty_queue_warning = log_empty_queue_warning
         self._prefetch_process = None            # type: Optional[multiprocessing.Process]
         self._queue_fetcher_thread = None
         self._queue_fetcher_thread_running = False
@@ -1023,20 +1023,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
 
     def _queue_fetcher_thread_fn(self):
         while self._queue_fetcher_thread_running:
-            # debug_queue_size_before = in_queue.qsize()
-            # start = time.time()
             msg = self._inter_process_queue.get()
-            # stop = time.time()
-            # debug_queue_size_after = in_queue.qsize()
-            # if debug_queue_size_before == 0:
-            #     logger.warning(f"THREAD: tried to fetch data, but prefetch queue was empty")
-            #     logger.warning(f"THREAD: queue size before: {debug_queue_size_before}")
-            #     logger.warning(f"THREAD: queue size after: {debug_queue_size_after}")
-            # diff = stop - start
-            # if diff > 0.1:
-                # logger.warning(f"THREAD: time to fetch item: {diff}s")
-                # logger.warning(f"THREAD: queue size before: {debug_queue_size_before}")
-                # logger.warning(f"THREAD: queue size after: {debug_queue_size_after}")
             self._local_queue.put(msg)
             if isinstance(msg, StopIteration):
                 return
@@ -1044,6 +1031,11 @@ class _ForkPrefetchIterator(CheckpointableIterator):
     def __next__(self):
         if self._prefetch_process is None:  # iterator has already been exhausted
             raise StopIteration()
+        if self._log_empty_queue_warning:
+            import logging
+            logger = logging.getLogger(__name__)
+            if self._local_queue.empty():
+                logger.warning("trying to fetch item, but local queue is empty")
         msg = self._local_queue.get()
         if isinstance(msg, StopIteration):
             self._terminate_and_join_queue_fetcher_thread()

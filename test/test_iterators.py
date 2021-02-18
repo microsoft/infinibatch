@@ -112,6 +112,7 @@ class TestFiniteIteratorCheckpointingMixin:
         for case_name, _, it in self.test_cases:
             with self.subTest(case_name):
                 list(it)  # exhaust iterator
+                self.assertRaises(StopIteration, it.__next__)
                 checkpoint = it.getstate()  # take checkpoint
                 it.setstate(None)  # reset to beginning
                 it.setstate(checkpoint)  # reset to checkpoint
