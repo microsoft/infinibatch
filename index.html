@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.1" />
+<meta name="generator" content="pdoc 0.9.2" />
 <title>infinibatch API documentation</title>
 <meta name="description" content="Infinibatch is a library of checkpointable iterators for randomized data loading of massive data sets in deep neural network training …" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -70,7 +70,7 @@ that it randomly draws samples from.</p>
 <p>Below we want to show how such a split can be created. An easy way to split your data into chunks is with the Linux <code>split</code> command.</p>
 <p>In this tutorial, our "corpus" consists of 6 lines of text, where each line is one data item.
 To create that corpus, please run this command in a bash shell. It creates a 6-line text file named <code>corpus.txt</code>:</p>
-<pre><code class="bash">echo \
+<pre><code class="language-bash">echo \
 'Lorem ipsum dolor sit amet,
 consectetur adipiscing elit,
 sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
@@ -81,21 +81,21 @@ The quick brown fox jumps over the lazy dog.' \
 </code></pre>
 <p>Now let us split it into 3 chunks of 2 lines each. Each chunk is stored as a zipped text file.
 We will create them inside a new subdirectory called <code>corpus_chunks</code>:</p>
-<pre><code class="bash">mkdir corpus_chunks
+<pre><code class="language-bash">mkdir corpus_chunks
 split  --lines 2  --numeric-suffixes                 \
        --filter 'gzip &gt; corpus_chunks/$FILE.txt.gz'  \
        corpus.txt  corpus.
 </code></pre>
 <p>This will have created three files: <code>corpus_chunks/corpus.00.txt.gz</code>, <code>corpus_chunks/corpus.01.txt.gz</code>, and <code>corpus_chunks/corpus.02.txt.gz</code>.
 To verify whether the data has been split as expected, you can use this command:</p>
-<pre><code class="bash">zcat corpus_chunks/corpus.*.txt.gz
+<pre><code class="language-bash">zcat corpus_chunks/corpus.*.txt.gz
 </code></pre>
 <p>Hint: For large corpora, we recommend replacing <code>gzip</code> by <code>pigz</code> (<code>apt-get install pigz</code>), which runs notably faster via multi-threading.</p>
 <h3 id="reading-items-in-random-order-with-infinibatch">Reading Items in Random Order With Infinibatch</h3>
 <p>We will first show the easiest way to read data with Infinibatch, using the helper function <code>chunked_dataset_iterator``()</code>.
 This function will create an Infinibatch iterator that yields the content of your data in random order.
 Please the following program:</p>
-<pre><code class="python">import gzip, glob
+<pre><code class="language-python">import gzip, glob
 
 from infinibatch import datasets as ds
 
@@ -110,7 +110,7 @@ for i in range(10):
     print(next(ds))
 </code></pre>
 <p>You should get output that contains the 6 example lines in randomized order:</p>
-<pre><code class="text">Lorem ipsum dolor sit amet,
+<pre><code class="language-text">Lorem ipsum dolor sit amet,
 consectetur adipiscing elit,
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
@@ -142,7 +142,7 @@ This is an example how one forms pipelines of iterators with Infinibatch
 (a concept familiar from Python's own <code>itertools</code>).
 Once an iterator is passed to another as its source, consider it owned by that other iterator,
 it must no longer be accessed by the calling code.</p>
-<pre><code class="python">import gzip, glob
+<pre><code class="language-python">import gzip, glob
 
 from infinibatch import datasets as ds
 from infinibatch import iterators as it
@@ -165,7 +165,7 @@ for i in range(25):
     print(next(bs))
 </code></pre>
 <p>This code should output something like this:</p>
-<pre><code class="python">['sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+<pre><code class="language-python">['sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
  'The quick brown fox jumps over the lazy dog.']
 ['consectetur adipiscing elit,', 'Lorem ipsum dolor sit amet,']
 ['Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
@@ -186,7 +186,7 @@ To support variable batch sizes, Infinibatch allows to pass a function as the <c
 That function will be given the longest item of a batch and should estimate how many items of at most this length can fit.</p>
 <p>In our example, we assume that batches can hold at most 150 tokens.
 Please change the above code as follows:</p>
-<pre><code class="python">    batch_size = lambda longest_line: 150 // len(longest_line),
+<pre><code class="language-python">    batch_size = lambda longest_line: 150 // len(longest_line),
 </code></pre>
 <p>The output looks like this:</p>
 <pre><code>['consectetur adipiscing elit,', 'Lorem ipsum dolor sit amet,']
@@ -207,7 +207,7 @@ These sequences are then padded to equal length with -1, and converted into a <c
 <p>Please rerun the previous example, but first insert the following code before the final <code>for</code> loop.
 This example uses an Infinibatch <code>MapIterator</code>, which applies a user-supplied function or
 lambda to each item:</p>
-<pre><code class="python">import numpy as np
+<pre><code class="language-python">import numpy as np
 def collate(lines_batch):
     # tokenize all lines in the batch and map to unit ids
     ids_batch = [[ord(c) for c in line] for line in lines_batch]
@@ -222,7 +222,7 @@ bs = it.MapIterator(
 </code></pre>
 <p>This will output batches like this. Note that in batches with multiple sentences,
 some entries are padded with <code>-1</code>.</p>
-<pre><code class="python">[[ 99 111 110 115 101  99 116 101 116 117 114  32  97 100 105 112 105 115
+<pre><code class="language-python">[[ 99 111 110 115 101  99 116 101 116 117 114  32  97 100 105 112 105 115
    99 105 110 103  32 101 108 105 116  44]
  [ 76 111 114 101 109  32 105 112 115 117 109  32 100 111 108 111 114  32
   115 105 116  32  97 109 101 116  44  -1]]
@@ -588,7 +588,7 @@ from .iterators import *</code></pre>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.1</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
 </footer>
 </body>
 </html>

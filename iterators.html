@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.1" />
+<meta name="generator" content="pdoc 0.9.2" />
 <title>infinibatch.iterators API documentation</title>
 <meta name="description" content="Overview …" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -51,24 +51,24 @@ Note that this example is completely artificial and does not solve any useful ta
 Its only purpose is to demonstrate the behavior of a pipeline of iterators.
 We provide a more realistic example in a later section.</p>
 <p>First, we create a small test data set.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
+<pre><code class="language-python-repl">&gt;&gt;&gt; dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 </code></pre>
 <p>We can turn this data set into an Infinibatch iterator by wrapping it in a <code><a title="infinibatch.iterators.NativeCheckpointableIterator" href="#infinibatch.iterators.NativeCheckpointableIterator">NativeCheckpointableIterator</a></code>.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
+<pre><code class="language-python-repl">&gt;&gt;&gt; it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
 </code></pre>
 <p>We can then transform the data items using a <code><a title="infinibatch.iterators.MapIterator" href="#infinibatch.iterators.MapIterator">MapIterator</a></code>,
 which applies a given function to each individual data item.
 For example, we can multiply each data item by 2.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
+<pre><code class="language-python-repl">&gt;&gt;&gt; it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
 </code></pre>
 <p>We can restructure the data set by batching together pairs of data items into lists using a <code><a title="infinibatch.iterators.FixedBatchIterator" href="#infinibatch.iterators.FixedBatchIterator">FixedBatchIterator</a></code>.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
+<pre><code class="language-python-repl">&gt;&gt;&gt; it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
 </code></pre>
 <p>Using another <code><a title="infinibatch.iterators.MapIterator" href="#infinibatch.iterators.MapIterator">MapIterator</a></code>, we can reduce each of these lists to its second element.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
+<pre><code class="language-python-repl">&gt;&gt;&gt; it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
 </code></pre>
 <p>Finally, we can use the resulting iterator <code>it</code> just like any standard Python iterator.</p>
-<pre><code class="py">&gt;&gt;&gt; for item in it:
+<pre><code class="language-py">&gt;&gt;&gt; for item in it:
 ...     print(item)
 2
 6
@@ -100,24 +100,24 @@ to capture the state of the entire pipeline.
 Internally, this is achieved by recursive calls that traverse the entire data loading pipeline to collect the state of every iterator in it.
 Similarly, when you want to reset a pipeline to a previous state, you only have to call <code>setstate</code> on the <strong>last</strong> iterator in the pipeline.</p>
 <p>To demonstrate this, we recreate the pipeline from the previous section.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
+<pre><code class="language-python-repl">&gt;&gt;&gt; dataset = list(range(6))  # 0, 1, 2, 3, 4, 5
 &gt;&gt;&gt; it = NativeCheckpointableIterator(dataset)  # 0, 1, 2, 3, 4, 5
 &gt;&gt;&gt; it = MapIterator(it, lambda n: 2 * n)  # 0, 2, 4, 6, 8, 10
 &gt;&gt;&gt; it = FixedBatchIterator(it, batch_size=2)  # [0, 2], [4, 6], [8, 10]
 &gt;&gt;&gt; it = MapIterator(it, lambda l: l[1])  # 2, 6, 10
 </code></pre>
 <p>Since <code>it</code> behaves just like a standard Python iterator, we can call <code>next</code> to retrieve its first element.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; next(it)
+<pre><code class="language-python-repl">&gt;&gt;&gt; next(it)
 2
 </code></pre>
 <p>We can now call <code>getstate</code> on <code>it</code> (which is the last <code><a title="infinibatch.iterators.MapIterator" href="#infinibatch.iterators.MapIterator">MapIterator</a></code> in the pipeline)
 to get a checkpoint of the internal state of the entire data loading pipeline.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; checkpoint = it.getstate()
+<pre><code class="language-python-repl">&gt;&gt;&gt; checkpoint = it.getstate()
 </code></pre>
 <p>Note that the checkpoint represents the internal state of the pipeline after the data item <code>2</code> has been retrieved.
 Using the checkpoint, we can always return to this <strong>exact</strong> point in the data set.
 To show this, let's exhaust the iterator by casting it to a list.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; list(it)
+<pre><code class="language-python-repl">&gt;&gt;&gt; list(it)
 [6, 10]
 </code></pre>
 <p>Since the iterator is now exhausted, calling <code>next</code> raises a <code>StopIteration</code> exception.</p>
@@ -128,11 +128,11 @@ StopIteration
 
 </code></pre>
 <p>We can now reset the pipeline to the checkpoint using <code>setstate</code>.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; it.setstate(checkpoint)
+<pre><code class="language-python-repl">&gt;&gt;&gt; it.setstate(checkpoint)
 </code></pre>
 <p>This recovers the state of the pipeline after the data item <code>2</code> has been retrieved.
 Thereby, we expect the next element to be <code>6</code>.</p>
-<pre><code class="python-repl">&gt;&gt;&gt; next(it)
+<pre><code class="language-python-repl">&gt;&gt;&gt; next(it)
 6
 </code></pre>
 <h2 id="types-of-iterators">Types of Iterators</h2>
@@ -549,13 +549,16 @@ def ChunkedSourceIterator(source_items: List, num_instances: int=1, instance_ran
         num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
     &#34;&#34;&#34;
-    # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
-    chunk_size = math.ceil(len(source_items) / num_instances)
-    # this does not cause any out-of-bounds issues:
-    # a slice with a start-index beyong the end of the list is empty,
-    # and an end-index of a slice is capped at the end of the list
-    chunk = source_items[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
-    return NativeCheckpointableIterator(chunk)
+    if instance_rank &gt;= num_instances:
+        raise ValueError(&#34;invalid instance_rank&#34;)
+    # we split the data into num_instances consecutive parts
+    # that differ by at most 1 in size
+    num_items_per_rank = len(source_items) // num_instances
+    ranks_with_additional_item = len(source_items) - num_instances * num_items_per_rank
+    def boundary(rank):
+        return rank * num_items_per_rank + min(rank, ranks_with_additional_item)
+    items = source_items[boundary(instance_rank):boundary(instance_rank + 1)]
+    return NativeCheckpointableIterator(items)
 
 
 class InfinitePermutationSourceIterator(CheckpointableIterator):
@@ -578,11 +581,13 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
             num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         &#34;&#34;&#34;
+        if not source_items:
+            raise ValueError(&#34;source must not be empty&#34;)
         self._source_items = source_items
-        if not self._source_items:
-            raise ValueError(&#34;InfinitePermutationIterator: source must not be empty&#34;)
         self._shuffle = shuffle
         self._seed = seed
+        if instance_rank &gt;= num_instances:
+            raise ValueError(&#34;invalid instance_rank&#34;)
         self._num_instances = num_instances
         self._instance_rank = instance_rank
         self.setstate(None)
@@ -870,7 +875,7 @@ class WindowedIterator(CheckpointableIterator):
     Yields &#39;width&#39; consecutive items in a sliding window.
 
     E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
-    [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]
+    [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
     &#34;&#34;&#34;
     def __init__(self, source_iterator: CheckpointableIterator, width: int):
         &#34;&#34;&#34;
@@ -926,7 +931,7 @@ class FixedBatchIterator(CheckpointableIterator):
     Batches N consecutive items into a single item that is a list of these items.
 
     E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
-    [(1, 2, 3), (4, 5, 6), (7, 8)]
+    [[1, 2, 3], [4, 5, 6], [7, 8]]
     &#34;&#34;&#34;
     def __init__(self, source_iterator: CheckpointableIterator, batch_size: int):
         &#34;&#34;&#34;
@@ -936,6 +941,8 @@ class FixedBatchIterator(CheckpointableIterator):
         &#34;&#34;&#34;
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError(&#39;source_iterator has to be a CheckpointableIterator&#39;)
+        if batch_size &lt;= 0:
+            raise ValueError(&#39;batch_size has to be positive&#39;)
         self._source_iterator = source_iterator  # type: CheckpointableIterator
         self._batch_size = batch_size            # type: int
         self.setstate(None)
@@ -1080,6 +1087,11 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, 
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
         multiprocessing: module to get `Queue` type from. Pass torch.multiprocessing here when items are Torch tensors for optimized data transfer.
     &#34;&#34;&#34;
+    if not isinstance(source_iterator, CheckpointableIterator):
+        raise ValueError(&#39;source_iterator has to be a CheckpointableIterator&#39;)
+    if buffer_size &lt;= 0:
+        raise ValueError(&#39;buffer_size must be positive&#39;)
+
     if python_multiprocessing.get_start_method() != &#39;fork&#39;:
         print(&#39;WARNING: \
                PrefetchIterator is only supported on operating system that use fork to create new processes.\
@@ -1101,8 +1113,6 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         multiprocessing_module: use this in place of Python&#39;s multiprocessing module, to allow for using torch.multiprocessing.Queue
     &#34;&#34;&#34;
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, multiprocessing_module):
-        if not isinstance(source_iterator, CheckpointableIterator):
-            raise ValueError(&#39;source_iterator has to be a CheckpointableIterator&#39;)
         self._source_iterator = source_iterator  # type:CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
         self._QueueType = multiprocessing_module.Queue if multiprocessing_module else  \
@@ -1176,7 +1186,7 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         self._terminate_and_join_prefetch_process()
 
     def _terminate_and_join_prefetch_process(self):  # terminate the pre-fetch process if one is running
-        if self._prefetch_process:
+        if hasattr(self, &#34;_prefetch_process&#34;) and self._prefetch_process:
             _ForkPrefetchIterator._join_process(self._prefetch_process)
         self._prefetch_process = None
 
@@ -1370,13 +1380,16 @@ As such, it takes a list as its source and not a CheckpointableIterator.</p>
         num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
     &#34;&#34;&#34;
-    # heuristic: assuming blocks are all of the same size, math.ceil should give us the shortest makespan
-    chunk_size = math.ceil(len(source_items) / num_instances)
-    # this does not cause any out-of-bounds issues:
-    # a slice with a start-index beyong the end of the list is empty,
-    # and an end-index of a slice is capped at the end of the list
-    chunk = source_items[instance_rank * chunk_size : (instance_rank + 1) * chunk_size]
-    return NativeCheckpointableIterator(chunk)</code></pre>
+    if instance_rank &gt;= num_instances:
+        raise ValueError(&#34;invalid instance_rank&#34;)
+    # we split the data into num_instances consecutive parts
+    # that differ by at most 1 in size
+    num_items_per_rank = len(source_items) // num_instances
+    ranks_with_additional_item = len(source_items) - num_instances * num_items_per_rank
+    def boundary(rank):
+        return rank * num_items_per_rank + min(rank, ranks_with_additional_item)
+    items = source_items[boundary(instance_rank):boundary(instance_rank + 1)]
+    return NativeCheckpointableIterator(items)</code></pre>
 </details>
 </dd>
 <dt id="infinibatch.iterators.ParallelMapIterator"><code class="name flex">
@@ -1541,6 +1554,11 @@ each block, and yielding the shuffled items of all blocks as a flat sequence.</p
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
         multiprocessing: module to get `Queue` type from. Pass torch.multiprocessing here when items are Torch tensors for optimized data transfer.
     &#34;&#34;&#34;
+    if not isinstance(source_iterator, CheckpointableIterator):
+        raise ValueError(&#39;source_iterator has to be a CheckpointableIterator&#39;)
+    if buffer_size &lt;= 0:
+        raise ValueError(&#39;buffer_size must be positive&#39;)
+
     if python_multiprocessing.get_start_method() != &#39;fork&#39;:
         print(&#39;WARNING: \
                PrefetchIterator is only supported on operating system that use fork to create new processes.\
@@ -1817,11 +1835,13 @@ The given list is loaded completely into RAM.</p>
             num_instances: number of instances of this iterator. Meant for use with multi-process data loading, e.g., in distributed training.
             instance_rank: rank of this instance of the iterator. Meant for use with multi-process data loading, e.g., in distributed training.
         &#34;&#34;&#34;
+        if not source_items:
+            raise ValueError(&#34;source must not be empty&#34;)
         self._source_items = source_items
-        if not self._source_items:
-            raise ValueError(&#34;InfinitePermutationIterator: source must not be empty&#34;)
         self._shuffle = shuffle
         self._seed = seed
+        if instance_rank &gt;= num_instances:
+            raise ValueError(&#34;invalid instance_rank&#34;)
         self._num_instances = num_instances
         self._instance_rank = instance_rank
         self.setstate(None)
@@ -2253,7 +2273,7 @@ If None is given, no callback is applied.</dd>
 <dd>
 <div class="desc"><p>Yields 'width' consecutive items in a sliding window.</p>
 <p>E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
-[[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]</p>
+[(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>source_iterator</code></strong></dt>
@@ -2268,7 +2288,7 @@ If None is given, no callback is applied.</dd>
     Yields &#39;width&#39; consecutive items in a sliding window.
 
     E.g. [1, 2, 3, 4, 5, 6] with width = 3 will yield
-    [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]
+    [(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6)]
     &#34;&#34;&#34;
     def __init__(self, source_iterator: CheckpointableIterator, width: int):
         &#34;&#34;&#34;
@@ -2340,7 +2360,7 @@ If None is given, no callback is applied.</dd>
 <dd>
 <div class="desc"><p>Batches N consecutive items into a single item that is a list of these items.</p>
 <p>E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
-[(1, 2, 3), (4, 5, 6), (7, 8)]</p>
+[[1, 2, 3], [4, 5, 6], [7, 8]]</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>source_iterator</code></strong></dt>
@@ -2357,7 +2377,7 @@ If None is given, no callback is applied.</dd>
     Batches N consecutive items into a single item that is a list of these items.
 
     E.g. [1, 2, 3 4, 5, 6, 7, 8] with batch_size = 3 will yield
-    [(1, 2, 3), (4, 5, 6), (7, 8)]
+    [[1, 2, 3], [4, 5, 6], [7, 8]]
     &#34;&#34;&#34;
     def __init__(self, source_iterator: CheckpointableIterator, batch_size: int):
         &#34;&#34;&#34;
@@ -2367,6 +2387,8 @@ If None is given, no callback is applied.</dd>
         &#34;&#34;&#34;
         if not isinstance(source_iterator, CheckpointableIterator):
             raise ValueError(&#39;source_iterator has to be a CheckpointableIterator&#39;)
+        if batch_size &lt;= 0:
+            raise ValueError(&#39;batch_size has to be positive&#39;)
         self._source_iterator = source_iterator  # type: CheckpointableIterator
         self._batch_size = batch_size            # type: int
         self.setstate(None)
@@ -2779,7 +2801,7 @@ is dynamic, and determined by a user-provided callback.</p>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.1</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
 </footer>
 </body>
 </html>
