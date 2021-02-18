@@ -878,6 +878,11 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, 
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
         multiprocessing: module to get `Queue` type from. Pass torch.multiprocessing here when items are Torch tensors for optimized data transfer.
     """
+    if not isinstance(source_iterator, CheckpointableIterator):
+        raise ValueError('source_iterator has to be a CheckpointableIterator')
+    if buffer_size <= 0:
+        raise ValueError('buffer_size must be positive')
+
     if python_multiprocessing.get_start_method() != 'fork':
         print('WARNING: \
                PrefetchIterator is only supported on operating system that use fork to create new processes.\
@@ -899,10 +904,6 @@ class _ForkPrefetchIterator(CheckpointableIterator):
         multiprocessing_module: use this in place of Python's multiprocessing module, to allow for using torch.multiprocessing.Queue
     """
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, multiprocessing_module):
-        if not isinstance(source_iterator, CheckpointableIterator):
-            raise ValueError('source_iterator has to be a CheckpointableIterator')
-        if buffer_size <= 0:
-            raise ValueError('buffer_size must be positive')
         self._source_iterator = source_iterator  # type:CheckpointableIterator
         self._buffer_size = buffer_size          # type: int
         self._QueueType = multiprocessing_module.Queue if multiprocessing_module else  \
