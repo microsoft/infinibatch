@@ -213,16 +213,12 @@ import copy
 import gzip
 from itertools import cycle, islice
 import math
+import multiprocessing
 import os
 import queue
 from random import Random
 import threading
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union, cast
-
-try:
-    import torch.multiprocessing as multiprocessing
-except ImportError:
-    import multiprocessing
 
 
 # TODO for next release:
@@ -875,14 +871,15 @@ def BlockwiseShuffleIterator(source_iterator: CheckpointableIterator, block_size
     return samples
 
 
-def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, log_empty_buffer_warning: bool=False):
+def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, buffer_in_main_process:bool=False, log_empty_buffer_warning: bool=False):
     """
     An iterator prefetching data into a buffer on a seperate process.
 
     Args:
         source_iterator: checkpointable iterator to recur over
         buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
-        log_empty_buffer_warning: log warning message if prefetch buffer is empty
+        buffer_in_main_process: use experimental version of PrefetchBuffer that has buffer in main process instead of prefetch process
+        log_empty_buffer_warning: log warning message if prefetch buffer is empty, only supported if buffer_in_main_process=True
     """
     if not isinstance(source_iterator, CheckpointableIterator):
         raise ValueError('source_iterator has to be a CheckpointableIterator')
@@ -897,10 +894,126 @@ def PrefetchIterator(source_iterator: CheckpointableIterator, buffer_size: int, 
                This also means that checkpoints of this iterator pipeline cannot be ported to a system that uses fork.')
         return source_iterator
     else:
-        return _ForkPrefetchIterator(source_iterator, buffer_size, log_empty_buffer_warning)
+        if buffer_in_main_process:
+            return _ForkPrefetchIteratorExperimental(source_iterator, buffer_size, log_empty_buffer_warning)
+        else:
+            return _ForkPrefetchIterator(source_iterator, buffer_size)
 
 
 class _ForkPrefetchIterator(CheckpointableIterator):
+    """
+    Actual internal implementation of the prefetch iterator for systems that support creating processes through fork.
+    Args:
+        source_iterator: checkpointable iterator to recur over
+        buffer_size: number of items to prefetch; this is the maximum number of items held in the prefetch queue
+    """
+    def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int):
+        self._source_iterator = source_iterator  # type:CheckpointableIterator
+        self._buffer_size = buffer_size          # type: int
+        self._prefetch_process = None            # type: Optional[multiprocessing.Process]
+        self.setstate(None)
+
+    def getstate(self) -> Dict:
+        return {'source_state': self._source_state,
+                'item_offset' : self._item_offset  }
+
+    def setstate(self, checkpoint: Optional[Dict]):
+        self._terminate_and_join_prefetch_process()  # kill current process if any
+
+        self._source_state = checkpoint['source_state'] if checkpoint is not None else None
+        self._item_offset  = checkpoint['item_offset' ] if checkpoint is not None else 0
+        self._source_iterator.setstate(self._source_state)
+        self._queue = multiprocessing.Queue(maxsize=self._buffer_size)
+        _prefetch_process = multiprocessing.Process(target=self._prefetch_process_fn,
+                                                           args=(self._source_iterator,
+                                                                 self._item_offset,  # @TODO: why pass all these parameters? They are forked anyways. Seems a left-over from thread days.
+                                                                 self._buffer_size,
+                                                                 self._queue))
+        _prefetch_process.start()  # this invokes fork()
+        self._prefetch_process = _prefetch_process
+        # make sure that in case of an unexpected shutdown, we still get rid of any active child process
+        import atexit
+        atexit.register(_ForkPrefetchIterator._join_process, self._prefetch_process)
+
+    @staticmethod
+    def _prefetch_process_fn(source, item_offset, buffer_size, queue):  # behavior of the prefetching process, only to be called from that process!        
+        _advance_iterator(source, item_offset)  # skip to checkpoint
+        while True:
+            try:
+                item = next(source)
+            except StopIteration:
+                queue.put(StopIteration())
+                # It seems Python Queue has a bug: if we return here, then the StopIteration message is never sent to the receiver.
+                # So we just dead-loop, assuming that the process will be killed anyways when the consuming side destructs the prefetcher.
+                import time
+                while True:
+                    time.sleep(1000)
+                return  # we never actually get here
+            if item_offset == buffer_size - 1:    # for efficiency, we send a new source state only at the END of each window of length _buffer_size
+                source_state = source.getstate()  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
+                item_offset = 0
+            else:
+                source_state = None
+                item_offset += 1
+            msg = (item, source_state)
+            queue.put(msg)
+
+    def __next__(self):
+        if self._queue is None:  # iterator has already been exhausted
+            raise StopIteration()
+        msg = self._queue.get()
+        if isinstance(msg, StopIteration):
+            self._queue = None
+            raise StopIteration()
+        item, prefetch_source_state = msg  # for efficiency, the prefetch_source_state is only transmitted at the end of each window of length _buffer_size
+        if prefetch_source_state is not None:
+            assert self._item_offset == self._buffer_size - 1  # we expect a new source state at then END of each window of length _buffer_size
+            self._source_state = prefetch_source_state
+            self._item_offset = 0
+        else:
+            self._item_offset = self._item_offset + 1
+            assert self._item_offset < self._buffer_size
+        return item  # for debugging, its useful to return msg instead of item
+
+    def __del__(self):  # note: this is often not called. If you really need it, gc.collect() will do the trick.
+        self._terminate_and_join_prefetch_process()
+
+    def _terminate_and_join_prefetch_process(self):  # terminate the pre-fetch process if one is running
+        if hasattr(self, "_prefetch_process") and self._prefetch_process:
+            _ForkPrefetchIterator._join_process(self._prefetch_process)
+        self._prefetch_process = None
+
+    @staticmethod
+    def _join_process(p):  # called from setstate(), __del__(), and atexit handler
+        # We create prefetching processes with UNIX fork.
+        # That means that we might end up with inactive copies
+        # of prefetchers in the memory of prefetching processes.
+        # These inactive copies can never create their
+        # own prefetching processes, even if setstate is called.
+        # All prefetching processes are exclusively created by
+        # the main process, even if there are nested PrefetchIterators.
+        # Hence, the main process should be the only one to terminate
+        # and join prefetching processes.
+        # The if-statement below guarantees that, even if __del__ is called
+        # on a copy of a PrefetchIterator in another process
+        if p._parent_pid != os.getpid():
+            return
+        if p.exitcode is not None:  # already joined: p.pid is invalid
+            return
+        # Note that we must terminate here instead of cleanly shutting down
+        # the prefetching process, e.g. using synchronization primitives.
+        # This is deliberate (and unfortunate).
+        # The prefetching process might spend an arbitrary amount of time
+        # in the preceeding iterators before it checks for potential termination messages.
+        # This would hold up the entire pipeline due to the join below.
+        # Hence, we terminate the process immediately.
+        # In some cases, the process function already ran its course. In that case,
+        # the terminate() call will have no effect.
+        p.terminate()
+        p.join()
+
+
+class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     """
     Actual internal implementation of the prefetch iterator for systems that support creating processes through fork.
 
@@ -1011,6 +1124,9 @@ class _ForkPrefetchIterator(CheckpointableIterator):
                 item = next(source_iterator)
             except StopIteration:
                 inter_process_queue.put(StopIteration())
+                while True:
+                    import time
+                    time.sleep(1000)
                 return
             if item_offset == buffer_size - 1:    # for efficiency, we send a new source state only at the END of each window of length _buffer_size
                 source_state = source_iterator.getstate()  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
