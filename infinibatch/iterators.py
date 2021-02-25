@@ -1061,14 +1061,31 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     # This starvation of the queue feeder thread led to severe hangs (up to a minute)
     # in calls to multiprocessing.Queue.get in the main process, even though the buffer had
     # hundreds of items stored in it.
+    #
+    # This problem gets even worse when PyTorch tensors are sent over the queue. PyTorch registers
+    # custom reducers to the ForkingPickler used to pickle tensors before sending them over a pipe
+    # (see https://github.com/pytorch/pytorch/blob/master/torch/multiprocessing/reductions.py).
+    # As a consequence, the actual tensor data is not sent via the queue, but shared via shared
+    # memory. This process involves spawning yet another thread in the prefetch process and opening
+    # sockets to transmit file descriptors
+    # (see https://pytorch.org/docs/stable/multiprocessing.html#file-descriptor-file-descriptor).
+    # So in this case, there is yet another thread competing for the global interpreter lock.
     # 
     # The present implementation moves the buffer from the prefetch process to the main process.
-    # Thereby, the prefetch process only has one thread, which alternatingly generates an item
-    # and then puts it onto the inter-process queue in an operation that blocks if the pipe is full.
-    # This removes the starvation problem described above and alleviates the hangs.
+    # For the case that the queue carries non-tensor data, this means that the prefetch process
+    # only has one thread, which alternatingly generates an item and then puts it onto the
+    # inter-process queue in an operation that blocks if the pipe is full. This removes the
+    # starvation problem described above and alleviates the hangs.
+    #
+    # For the case that the queue carries PyTorch tensors, we still get a separate thread in the
+    # prefetch process that is responsible for feeding the sockets involved in transferring
+    # file descriptors, and we still observe hangs in calls to multiprocessing.Queue.get in this case.
+    # However, these hangs are not stalling the data loading process anymore as long as the buffer
+    # is not empty because the buffer now lives in the main process.
     #
     # We suspect the hanging issues described above to be manifestations of the "Convoy effect":
     # https://bugs.python.org/issue7946
+    # http://www.dabeaz.com/python/GIL.pdf
     # https://in.pycon.org/2011/static/files/talks/41/Python-threads_v1.0.pdf
 
     def __init__(self, source_iterator: CheckpointableIterator, buffer_size: int, log_empty_buffer_warning: bool=False):

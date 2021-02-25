@@ -19,7 +19,7 @@ Infinibatch is a library of checkpointable iterators for randomized data loading
 
 ## Getting Started
 
-Infinibatch requires Python 3.5 and has no dependencies.
+Infinibatch requires Python 3.6 or higher and has no dependencies.
 There is presently no pip package.
 
 To install it, clone this repository and install it locally.
