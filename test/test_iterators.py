@@ -3,6 +3,8 @@ import itertools
 from random import Random
 import unittest
 
+import torch
+
 from infinibatch.iterators import *
 
 if __name__ == "__main__":
@@ -112,6 +114,7 @@ class TestFiniteIteratorCheckpointingMixin:
         for case_name, _, it in self.test_cases:
             with self.subTest(case_name):
                 list(it)  # exhaust iterator
+                self.assertRaises(StopIteration, it.__next__)
                 checkpoint = it.getstate()  # take checkpoint
                 it.setstate(None)  # reset to beginning
                 it.setstate(checkpoint)  # reset to checkpoint
@@ -367,7 +370,7 @@ class TestPrefetchIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterator
         super().setUp()
         self.test_cases = []
         for n in self.lengths:
-            for buffer_size in [42]:  # TODO: Add more buffer sizes after implementing lazy init for prefetcher
+            for buffer_size in self.lengths:
                 data = list(range(n))
                 it = PrefetchIterator(NativeCheckpointableIterator(data), buffer_size)
                 self.test_cases.append(("n={}, buffer_size={}".format(n, buffer_size), data, it))
@@ -375,6 +378,41 @@ class TestPrefetchIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIterator
     def test_zero_buffer_size(self):
         f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0)
         self.assertRaises(ValueError, f)
+
+    def test_torch_tensors(self):
+        for n in self.lengths:
+            for buffer_size in self.lengths:
+                with self.subTest("n={}, buffer_size={}".format(n, buffer_size)):
+                    data = [torch.Tensor([float(i)]) for i in range(n)]
+                    it = PrefetchIterator(NativeCheckpointableIterator(copy.deepcopy(data)), buffer_size)
+                    result = list(it)
+                    self.assertEqual(result, data)
+
+
+class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
+    def setUp(self):
+        super().setUp()
+        self.test_cases = []
+        for n in self.lengths:
+            for buffer_size in self.lengths:
+                data = list(range(n))
+                it = PrefetchIterator(NativeCheckpointableIterator(data), buffer_size, buffer_in_main_process=True)
+                self.test_cases.append(("n={}, buffer_size={}".format(n, buffer_size), data, it))
+
+    def test_zero_buffer_size(self):
+        f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0, buffer_in_main_process=True)
+        self.assertRaises(ValueError, f)
+
+    def test_torch_tensors(self):
+        for n in self.lengths:
+            for buffer_size in self.lengths:
+                with self.subTest("n={}, buffer_size={}".format(n, buffer_size)):
+                    data = [torch.Tensor([float(i)]) for i in range(n)]
+                    it = PrefetchIterator(
+                        NativeCheckpointableIterator(copy.deepcopy(data)), buffer_size, buffer_in_main_process=True
+                    )
+                    result = list(it)
+                    self.assertEqual(result, data)
 
 
 class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
