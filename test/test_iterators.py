@@ -403,6 +403,14 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
         f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0, buffer_in_main_process=True)
         self.assertRaises(ValueError, f)
 
+    def test_closing(self):
+        it = PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=42, buffer_in_main_process=True)
+        it.close()
+        f = lambda: it.__next__()
+        self.assertRaises(RuntimeError, f)
+        f = lambda: it.setstate(None)
+        self.assertRaises(RuntimeError, f)
+
     def test_torch_tensors(self):
         for n in self.lengths:
             for buffer_size in self.lengths:
@@ -413,6 +421,11 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
                     )
                     result = list(it)
                     self.assertEqual(result, data)
+
+    def tearDown(self):
+        if hasattr(self, "test_cases"):
+            for _, _, it in self.test_cases:
+                it.close()
 
 
 class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
