@@ -208,6 +208,7 @@ It is mainly intended for demonstration and debugging purposes.
 """
 
 from abc import abstractmethod
+import atexit
 import collections
 import copy
 import gzip
@@ -218,6 +219,7 @@ import os
 import queue
 from random import Random
 import threading
+import time
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union, cast
 
 
@@ -1137,7 +1139,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         self._log_empty_buffer_warning = log_empty_buffer_warning
         self._is_closed = False
         self.setstate(None)
-        import atexit
+
         atexit.register(self._shutdown)
         # print(f"parent: {os.getpid()} {threading.get_ident()}")
 
@@ -1173,14 +1175,11 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         if isinstance(msg, StopIteration):
             self._shutdown()
             raise StopIteration()
-        (
-            item,
-            prefetch_source_state,
-        ) = msg  # for efficiency, the prefetch_source_state is only transmitted at the end of each window of length _buffer_size
+        # for efficiency, the prefetch_source_state is only transmitted at the end of each window of length _buffer_size
+        item, prefetch_source_state = msg
         if prefetch_source_state is not None:
-            assert (
-                self._item_offset == self._buffer_size - 1
-            )  # we expect a new source state at then END of each window of length _buffer_size
+            # we expect a new source state at then END of each window of length _buffer_size
+            assert self._item_offset == self._buffer_size - 1
             self._source_state = prefetch_source_state
             self._item_offset = 0
         else:
@@ -1217,7 +1216,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         # the variable is None if the prefetcher is not running
         if hasattr(self, "_prefetch_process") and self._prefetch_process is not None:
             # if self._prefetch_process is not None, neither should self._queue_fetcher_thread
-            assert(self._queue_fetcher_thread is not None)
+            assert self._queue_fetcher_thread is not None
 
             # shut down queue fetcher thread
             self._queue_fetcher_thread_running = False  # signal thread to halt
@@ -1227,7 +1226,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
             self._queue_fetcher_thread = None
 
             # shut down prefetch process
-            assert(self._prefetch_process._parent_pid == os.getpid())
+            assert self._prefetch_process._parent_pid == os.getpid()
             self._prefetch_process.terminate()
             self._prefetch_process.join()
             self._prefetch_process = None
@@ -1244,16 +1243,12 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
             except StopIteration:
                 inter_process_queue.put(StopIteration())
                 while True:
-                    import time
-
                     time.sleep(1000)
                 return
-            if (
-                item_offset == buffer_size - 1
-            ):  # for efficiency, we send a new source state only at the END of each window of length _buffer_size
-                source_state = (
-                    source_iterator.getstate()
-                )  # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
+            if item_offset == buffer_size - 1:
+                # for efficiency, we send a new source state only at the END of each window of length _buffer_size
+                # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
+                source_state = source_iterator.getstate()
                 item_offset = 0
             else:
                 source_state = None
@@ -1269,7 +1264,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
             if isinstance(msg, StopIteration):
                 return
 
-                        # terminate prefetch process if it exists
+                # terminate prefetch process if it exists
             # if hasattr(self, "_prefetch_process") and self._prefetch_process is not None:
             #     # We create prefetching processes with UNIX fork.
             #     # That means that we might end up with inactive copies
