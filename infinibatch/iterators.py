@@ -1204,6 +1204,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
             args=(self._source_iterator, self._item_offset, self._buffer_size, self._inter_process_queue),
         )
         _prefetch_process.start()  # this invokes fork()
+        # set self._prefetch_process after fork so that variable never exists for within prefetch process
         self._prefetch_process = _prefetch_process
 
         # set up queue fetcher thread
