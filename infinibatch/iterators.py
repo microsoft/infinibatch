@@ -1138,6 +1138,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         self._buffer_size = buffer_size  # type: int
         self._log_empty_buffer_warning = log_empty_buffer_warning
         self._is_closed = False
+        self._is_exhausted = False
         self.setstate(None)
 
         atexit.register(self._shutdown)
@@ -1157,13 +1158,15 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         self._item_offset = checkpoint["item_offset"] if checkpoint is not None else 0
         self._source_iterator.setstate(self._source_state)
 
-        self._startup()
+        self._is_exhausted = False
 
     def __next__(self):
         if self._is_closed:
             raise RuntimeError("PrefetchIterator has already been closed.")
-
-        if self._prefetch_process is None:  # iterator has already been exhausted
+        if not hasattr(self, "_prefetch_process") or self._prefetch_process is None:
+            # prefetcher process has not yet been started
+            self._startup()
+        if self._is_exhausted:
             raise StopIteration()
         if self._log_empty_buffer_warning:
             import logging
@@ -1173,7 +1176,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
                 logger.warning("trying to fetch item, but prefetch buffer is empty")
         msg = self._local_queue.get()
         if isinstance(msg, StopIteration):
-            self._shutdown()
+            self._is_exhausted = True
             raise StopIteration()
         # for efficiency, the prefetch_source_state is only transmitted at the end of each window of length _buffer_size
         item, prefetch_source_state = msg
@@ -1212,8 +1215,8 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
 
     def _shutdown(self):
         # only shut down if this is the parent process and the prefetcher is running
-        # the variable self._prefetch_process only exists in the parent process
-        # the variable is None if the prefetcher is not running
+        # the variable self._prefetch_process can only exist in the parent process
+        # the variable exists and is not None only if the prefetcher is running
         if hasattr(self, "_prefetch_process") and self._prefetch_process is not None:
             # if self._prefetch_process is not None, neither should self._queue_fetcher_thread
             assert self._queue_fetcher_thread is not None
