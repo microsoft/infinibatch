@@ -1,5 +1,6 @@
 import copy
 import itertools
+import multiprocessing
 from random import Random
 import unittest
 
@@ -404,6 +405,8 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
         self.assertRaises(ValueError, f)
 
     def test_closing(self):
+        if multiprocessing.get_start_method() != 'fork':
+            return # dummy iterator used, skip test
         it = PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=42, buffer_in_main_process=True)
         it.close()
         f = lambda: it.__next__()
