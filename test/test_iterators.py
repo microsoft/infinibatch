@@ -421,6 +421,7 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
                     )
                     result = list(it)
                     self.assertEqual(result, data)
+                    it.close()
 
     def tearDown(self):
         if hasattr(self, "test_cases"):

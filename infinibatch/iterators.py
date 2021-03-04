@@ -208,11 +208,11 @@ It is mainly intended for demonstration and debugging purposes.
 """
 
 from abc import abstractmethod
-import atexit
 import collections
 import copy
 import gzip
 from itertools import cycle, islice
+import logging
 import math
 import multiprocessing
 import os
@@ -222,6 +222,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union, cast
 
+logger = logging.getLogger(__name__)
 
 # TODO for next release:
 #  - benchmark the accuracy when using BlockwiseShuffleIterator vs. the BufferedShuffleIterator
@@ -292,6 +293,18 @@ class CheckpointableIterator(collections.abc.Iterator):
 
     @abstractmethod
     def close(self):
+        """
+        Close all PrefetchIterators in this pipeline
+
+        PrefetchIterators have internal resources that need to be properly managed by calling close() manually.
+        Failure to do so can lead to dangling processes and threads, or the PrefetchIterator hanging on finalization.
+        Note that it is not correct to rely on the garbage collector to destroy PrefetchIterators
+        as CPython does not assure that the finalizer (__del__) of a PrefetchIterator will be called.
+
+        This function, which is implemented for every CheckpointableIterator, recursively traverses all preceeding
+        iterators and closes all PrefetchIterators in the pipeline.
+        For pipelines that do not contain PrefetchIterators this function has no effect.
+        """
         pass
 
 
@@ -1061,10 +1074,12 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     Actual internal implementation of the prefetch iterator for systems that support creating processes through fork.
 
     WARNING:
-    PrefetchIterator objects have internal resources that need to be properly managed by calling close() manually.
-    Failure to do so can lead to dangling processes and threads, or the process hanging on finalization.
-    Note that it is not correct to rely on the garbage colletor to destroy the PrefetchIterator
+    PrefetchIterators have internal resources that need to be properly managed by calling close() manually.
+    Failure to do so can lead to dangling processes and threads, or the PrefetchIterator hanging on finalization.
+    Note that it is not correct to rely on the garbage collector to destroy the PrefetchIterator
     as CPython does not assure that the finalizer (__del__) of the PrefetchIterator will be called.
+    The close() function is implemented for every CheckpointableIterator.
+    It recursively traverses all preceeding iterators in the pipeline and closes all PrefetchIterators.
 
     Args:
         source_iterator: checkpointable iterator to recur over
@@ -1146,8 +1161,6 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         self._is_closed = False
         self.setstate(None)
 
-        atexit.register(self._shutdown)
-
     def getstate(self) -> Dict:
         return {"source_state": self._source_state, "item_offset": self._item_offset}
 
@@ -1177,9 +1190,6 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         if self._is_exhausted:
             raise StopIteration()
         if self._log_empty_buffer_warning:
-            import logging
-
-            logger = logging.getLogger(__name__)
             if self._local_queue.empty():
                 logger.warning("trying to fetch item, but prefetch buffer is empty")
         msg = self._local_queue.get()
@@ -1201,6 +1211,18 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         return item  # for debugging, its useful to return msg instead of item
 
     def close(self):
+        """
+        Close all PrefetchIterators in this pipeline
+
+        PrefetchIterators have internal resources that need to be properly managed by calling close() manually.
+        Failure to do so can lead to dangling processes and threads, or the PrefetchIterator hanging on finalization.
+        Note that it is not correct to rely on the garbage collector to destroy PrefetchIterators
+        as CPython does not assure that the finalizer (__del__) of a PrefetchIterator will be called.
+
+        This function, which is implemented for every CheckpointableIterator, recursively traverses all preceeding
+        iterators and closes all PrefetchIterators in the pipeline.
+        For pipelines that do not contain PrefetchIterators this function has no effect.
+        """
         if not self._is_closed:
             self._is_closed = True
             self._shutdown()
@@ -1279,7 +1301,6 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
             inter_process_queue.put(msg)
 
     def _queue_fetcher_thread_fn(self):
-        # print(f"prefetch thread {threading.get_ident()}")
         while not self._queue_fetcher_thread_should_terminate.is_set():
             msg = self._inter_process_queue.get()
             self._local_queue.put(msg)
@@ -1287,7 +1308,10 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
                 return
 
     def __del__(self):
-        self._shutdown()
+        if hasattr(self, "_prefetch_process") and not self._is_closed:
+            logger.warning(f"unclosed PrefetchIterator {self!r}: not closing a PrefetchIterator may lead to dangling processes and hangs on finalization")
+            self._shutdown()
+
 
 class BucketedReadaheadBatchIterator(CheckpointableIterator):
     """
