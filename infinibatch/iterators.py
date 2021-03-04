@@ -1095,11 +1095,10 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     # of the preceeding iterators.
     #
     # The prefetch process (self._prefetch_process) generates items and puts them
-    # into an inter-process queue (self._inter_process_queue). This queue is of type
-    # multiprocessing.SimpleQueue, which is essentially a pipe with some locks.
-    # This queue does not store any items beyond the capacity of the pipe,
-    # which is typically very small. Its sole purpose is to act as a means for
-    # inter-process communication. Its purpose is NOT to act as the above-mentioned buffer.
+    # into an inter-process queue (self._inter_process_queue of type multiprocessing.Queue).
+    # The sole purpose of this queue is to act as a means for inter-process communication.
+    # Its purpose is NOT to act as the above-mentioned buffer.
+    # Accordingly, the size of this queue is restricted to 1.
     #
     # The actual buffer is realized as a local, thread-safe queue (queue.Queue) that lives
     # in the main process (self._local_queue). We create a thread (self._queue_fetcher_thread)
@@ -1107,7 +1106,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     # inter-process queue and storing them in the local queue. We then obtain an item from the
     # local queue whenever __next__ is called within the main thread of the main process.
     #
-    # You might wonder why we are jumping through all these hoops instead of just using
+    # You might wonder why we jump through all of these hoops instead of just using
     # a multiprocessing.Queue with the desired buffer_size to act as both a means for
     # inter-process communication and as a buffer to smooth out latency at the same time.
     # In fact, this iterator used to be implemented that way.
@@ -1135,17 +1134,10 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     # (see https://pytorch.org/docs/stable/multiprocessing.html#file-descriptor-file-descriptor).
     # So in this case, there is yet another thread competing for the global interpreter lock.
     #
-    # The present implementation moves the buffer from the prefetch process to the main process.
-    # For the case that the queue carries non-tensor data, this means that the prefetch process
-    # only has one thread, which alternatingly generates an item and then puts it onto the
-    # inter-process queue in an operation that blocks if the pipe is full. This removes the
-    # starvation problem described above and alleviates the hangs.
-    #
-    # For the case that the queue carries PyTorch tensors, we still get a separate thread in the
-    # prefetch process that is responsible for feeding the sockets involved in transferring
-    # file descriptors, and we still observe hangs in calls to multiprocessing.Queue.get in this case.
-    # However, these hangs are not stalling the data loading process anymore as long as the buffer
-    # is not empty because the buffer now lives in the main process.
+    # By restricting the size of the inter-process queue to 1 we avoid or at least lessen
+    # the starvation issues in the prefetch process caused by multiple threads fighting
+    # for the global interpreter lock. Any remaining hangs or delays in the prefetch process
+    # are hidden by having the buffer in the main process instead of the prefetch process.
     #
     # We suspect the hanging issues described above to be manifestations of the "Convoy effect":
     # https://bugs.python.org/issue7946
@@ -1176,9 +1168,9 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         self._item_offset = checkpoint["item_offset"] if checkpoint is not None else 0
         self._source_iterator.setstate(self._source_state)
 
-        # in the given checkpoint, the source iterator might already be exhausted
-        # we will figure that out once we try to get the first item
-        # for now, we have to reset this variable
+        # In the given checkpoint, the source iterator might already be exhausted.
+        # We will figure that out once we try to get the first item.
+        # For now, we have to reset this variable.
         self._is_exhausted = False
 
     def __next__(self):
@@ -1195,7 +1187,18 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         msg = self._local_queue.get()
         if isinstance(msg, StopIteration):
             self._is_exhausted = True
-            # signal prefetch process to terminate
+            # The source iterator is exhausted.
+            # At this point, the queue fetcher thread should already have terminated.
+            # The prefetch process will only terminate once we signal it via _prefetch_process_should_terminate.
+            # This is because we have to make sure no more items are taken from the inter_process_queue
+            # before we shut down the prefetch process as explained in _startup().
+            # We would like to terminate the prefetch process, but we cannot use _shutdown() here
+            # because that would set self._prefetch_process = None,
+            # which would mean we would call _startup() on the next call of __next__.
+            # Instead, manually make sure the queue fetcher thread has actually terminated so that
+            # no more elements are taken from the inter_process_queue
+            # and then signal the prefetch process to terminate.
+            self._queue_fetcher_thread.join()
             self._prefetch_process_should_terminate.set()
             raise StopIteration()
         # for efficiency, the prefetch_source_state is only transmitted at the end of each window of length _buffer_size
@@ -1230,16 +1233,21 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
 
     def _startup(self):
         # set up prefetch process and associated queue
-        self._inter_process_queue = multiprocessing.SimpleQueue()
-        # because of the way PyTorch transfers tensors through shared memory
-        # (see comment at top of this class)
+        self._inter_process_queue = multiprocessing.Queue(maxsize=1)
+        # Because of the way PyTorch transfers tensors through shared memory (see comment at top of this class)
         # we have to keep the prefetch process alive until we are sure that
-        # the main process will not get any more items from the inter-process queue
-        # this event is used to communicate to the prefetch process that it is safe to terminate
+        # no more items are taken from the inter-process queue.
+        # This event is used to communicate to the prefetch process that it is safe to terminate.
         self._prefetch_process_should_terminate = multiprocessing.Event()
         _prefetch_process = multiprocessing.Process(
             target=self._prefetch_process_fn,
-            args=(self._source_iterator, self._item_offset, self._buffer_size, self._inter_process_queue, self._prefetch_process_should_terminate),
+            args=(
+                self._source_iterator,
+                self._item_offset,
+                self._buffer_size,
+                self._inter_process_queue,
+                self._prefetch_process_should_terminate,
+            ),
         )
         _prefetch_process.start()  # this invokes fork()
         # set self._prefetch_process after fork so that variable never exists for within prefetch process
@@ -1248,46 +1256,42 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         # set up queue fetcher thread
         self._local_queue = queue.Queue(maxsize=self._buffer_size)
         self._queue_fetcher_thread_should_terminate = threading.Event()
-        self._queue_fetcher_thread = threading.Thread(target=self._queue_fetcher_thread_fn)
-        self._queue_fetcher_thread.daemon = True
+        self._queue_fetcher_thread = threading.Thread(target=self._queue_fetcher_thread_fn, daemon=True)
         self._queue_fetcher_thread.start()
 
     def _shutdown(self):
-        # only shut down if this is the parent process and the prefetcher is running
-        # the variable self._prefetch_process can only exist in the parent process
-        # the variable exists and is not None only if the prefetcher is running
+        # Only shut down if this is the parent process and the prefetcher is running.
+        # The variable self._prefetch_process can only exist in the parent process.
+        # The variable exists and is not None only if the prefetcher is running.
         if hasattr(self, "_prefetch_process") and self._prefetch_process is not None:
             # if self._prefetch_process is not None, neither should self._queue_fetcher_thread
             assert self._queue_fetcher_thread is not None
-
+            # sanity check that this is actually the parent of the prefetch process
+            assert self._prefetch_process._parent_pid == os.getpid()
             # shut down queue fetcher thread
             self._queue_fetcher_thread_should_terminate.set()
-            while not self._local_queue.empty():
-                self._local_queue.get()
             self._queue_fetcher_thread.join()
             self._queue_fetcher_thread = None
-
             # shut down prefetch process
-            assert self._prefetch_process._parent_pid == os.getpid()
             self._prefetch_process_should_terminate.set()
             self._prefetch_process.join()
             self._prefetch_process = None
 
     @staticmethod
     def _prefetch_process_fn(
-        source_iterator, item_offset, buffer_size, inter_process_queue, should_terminate
+        source_iterator, item_offset, buffer_size, inter_process_queue, should_terminate_event
     ):  # behavior of the prefetching process, only to be called from that process!
         _advance_iterator(source_iterator, item_offset)  # skip to checkpoint
-        while not should_terminate.is_set():
+        while True:
             try:
                 item = next(source_iterator)
             except StopIteration:
-                inter_process_queue.put(StopIteration())
-                # because of the way PyTorch transfers tensors through shared memory
-                # (see comment at top of this class)
+                _ForkPrefetchIteratorExperimental._try_put(inter_process_queue, StopIteration(), should_terminate_event)
+                # Because of the way PyTorch transfers tensors through shared memory (see comment at top of this class)
                 # we have to keep the prefetch process alive until we are sure that
-                # the main process will not get any more items from the inter-process queue
-                should_terminate.wait()
+                # no more items are taken from the inter-process queue.
+                # This event is used to communicate to the prefetch process that it is safe to terminate.
+                should_terminate_event.wait()
                 return
             if item_offset == buffer_size - 1:
                 # for efficiency, we send a new source state only at the END of each window of length _buffer_size
@@ -1298,18 +1302,43 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
                 source_state = None
                 item_offset += 1
             msg = (item, source_state)
-            inter_process_queue.put(msg)
+            should_terminate = _ForkPrefetchIteratorExperimental._try_put(
+                inter_process_queue, msg, should_terminate_event
+            )
+            if should_terminate:
+                return
 
     def _queue_fetcher_thread_fn(self):
-        while not self._queue_fetcher_thread_should_terminate.is_set():
+        while True:
             msg = self._inter_process_queue.get()
-            self._local_queue.put(msg)
+            should_terminate = _ForkPrefetchIteratorExperimental._try_put(
+                self._local_queue, msg, self._queue_fetcher_thread_should_terminate
+            )
+            if should_terminate:
+                return
             if isinstance(msg, StopIteration):
                 return
 
+    @staticmethod
+    def _try_put(q, msg, should_terminate_event, timeout=0.001):
+        """
+        Repeatedly try to put message on queue until success or should_terminate_event is set.
+        If success, return False.
+        If should_terminate_event is set, return True.
+        """
+        while not should_terminate_event.is_set():
+            try:
+                q.put(msg, timeout=timeout)
+                return False
+            except queue.Full:
+                pass
+        return True
+
     def __del__(self):
         if hasattr(self, "_prefetch_process") and not self._is_closed:
-            logger.warning(f"unclosed PrefetchIterator {self!r}: not closing a PrefetchIterator may lead to dangling processes and hangs on finalization")
+            logger.warning(
+                f"unclosed PrefetchIterator {self!r}: not closing a PrefetchIterator may lead to dangling processes and hangs on finalization"
+            )
             self._shutdown()
 
 
