@@ -414,6 +414,19 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
         f = lambda: it.setstate(None)
         self.assertRaises(RuntimeError, f)
 
+    def test_nested(self):
+        for n in self.lengths:
+            for buffer_size in self.lengths:
+                for depth in [2, 3, 4, 5]:
+                    with self.subTest("n={}, buffer_size={}, depth={}".format(n, buffer_size, depth)):
+                        data = [torch.Tensor([float(i)]) for i in range(n)]
+                        it = NativeCheckpointableIterator(copy.deepcopy(data))
+                        for _ in range(depth):
+                            it = PrefetchIterator(it, buffer_size, buffer_in_main_process=True)
+                        result = list(it)
+                        self.assertEqual(result, data)
+                        it.close()
+
     def test_torch_tensors(self):
         for n in self.lengths:
             for buffer_size in self.lengths:

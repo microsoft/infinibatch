@@ -1292,7 +1292,7 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
                 # no more items are taken from the inter-process queue.
                 # This event is used to communicate to the prefetch process that it is safe to terminate.
                 should_terminate_event.wait()
-                return
+                break
             if item_offset == buffer_size - 1:
                 # for efficiency, we send a new source state only at the END of each window of length _buffer_size
                 # this is the state for retrieving the NEXT element, i.e. the first element of the next buffer
@@ -1306,7 +1306,8 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
                 inter_process_queue, msg, should_terminate_event
             )
             if should_terminate:
-                return
+                break
+        source_iterator.close()
 
     def _queue_fetcher_thread_fn(self):
         while True:
