@@ -1311,6 +1311,15 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
 
     def _queue_fetcher_thread_fn(self):
         while True:
+            # This get-operation cannot deadlock:
+            # For his operation to deadlock, the queue must be empty and the prefetch process must never put
+            # another item on the queue. Under the assumption that the prefetch process works correctly,
+            # this can only happen in two ways. First, the prefetch process could exhaust its source iterator
+            # and put a StopIteration on the queue. In this case, this thread will receive the StopIteration
+            # and terminate, which means the operation does not deadlock. Second, the prefetch process could
+            # terminate because the corresponding signal is set as part of a _shutdown(). However, we terminate
+            # and join this thread before we set the terminate signal for the prefetch process,
+            # so this case cannot happen.
             msg = self._inter_process_queue.get()
             should_terminate = _ForkPrefetchIteratorExperimental._try_put(
                 self._local_queue, msg, self._queue_fetcher_thread_should_terminate
