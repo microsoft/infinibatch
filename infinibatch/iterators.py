@@ -1113,8 +1113,8 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
     # However, we observed severe issues with that implementation.
     #
     # Specifically, with multiprocessing.Queue the buffer lives in the prefetch process
-    # and a queue feeding thread is responsible for moving items from the buffer onto the pipe
-    # (see https://docs.python.org/3.6/library/multiprocessing.html#multiprocessing.Queue).
+    # and a queue feeding thread is responsible for moving items from the buffer onto a pipe
+    # (see https://docs.python.org/3.6/library/multiprocessing.html#multiprocessing.Queue)
     # The main thread in the prefetch process, which is responsible for generating items,
     # competes with the queue feeder thread for CPU cycles, and because of CPython's
     # global interpreter lock only one of these two processes can run at any given time.
@@ -1184,6 +1184,13 @@ class _ForkPrefetchIteratorExperimental(CheckpointableIterator):
         if self._log_empty_buffer_warning:
             if self._local_queue.empty():
                 logger.warning("trying to fetch item, but prefetch buffer is empty")
+        # This get-operation cannot deadlock:
+        # Under the assumption that the prefetch process and the queue fetcher thread work correctly,
+        # this operation can only deadlock if at the time of this call the source iterator is
+        # exhausted, the local queue is empty, and there are no items in transit to the local queue.
+        # In that case, a StopIteration was the last item ever put on the local queue.
+        # That stop iteration would have caused self._is_exhausted to be set to True,
+        # which means the following line would never have been reached, a contradiction.
         msg = self._local_queue.get()
         if isinstance(msg, StopIteration):
             self._is_exhausted = True
