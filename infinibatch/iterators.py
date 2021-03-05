@@ -414,19 +414,23 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
         self._random_state = checkpoint['random_state'] if checkpoint else None
         self._index        = checkpoint['index']        if checkpoint else self._instance_rank
 
-        self._random = Random(self._seed)
-        if self._random_state is not None:
-            self._random.setstate(self._random_state)
-        
-        if self._shuffle:
-            self._random_state = self._random.getstate()
-            self._shuffled_items = self._source_items[:]
-            self._random.shuffle(self._shuffled_items)
-            self._reshuffle_if_necessary()
-        else:
-            self._index = self._index % len(self._source_items)
+        # this will trigger the lazy initialization in self.__next__
+        self._random = None
 
     def __next__(self):
+        if self._random == None:
+            # lazy initialization
+            self._random = Random(self._seed)
+            if self._random_state is not None:
+                self._random.setstate(self._random_state)
+            if self._shuffle:
+                self._random_state = self._random.getstate()
+                self._shuffled_items = copy.deepcopy(self._source_items)
+                self._random.shuffle(self._shuffled_items)
+                self._reshuffle_if_necessary()
+            else:
+                self._index = self._index % len(self._source_items)
+
         assert(0 <= self._index and self._index < len(self._source_items))
         if self._shuffle:
             result = self._shuffled_items[self._index]
@@ -435,6 +439,7 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
         else:
             result = self._source_items[self._index]
             self._index = (self._index + self._num_instances) % len(self._source_items)
+        assert(0 <= self._index and self._index < len(self._source_items))
         return result
 
     def close(self):
@@ -443,13 +448,12 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
     def _reshuffle_if_necessary(self):
         while self._index >= len(self._source_items):
             # Our new index is out of range, so we need to reshuffle.
-            # Since len(self._source_items) might be smaller than self._num_instances,
+            # Since len(self._source_items) can be smaller than self._num_instances,
             # we might have to reshuffle multiple times to "skip through" permutations of self._source_items.
             self._random_state = self._random.getstate()
             self._shuffled_items = self._source_items[:]
             self._random.shuffle(self._shuffled_items)
             self._index -= len(self._source_items)
-        assert(0 <= self._index and self._index < len(self._source_items))
 
         
 
