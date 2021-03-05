@@ -452,7 +452,7 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
 
     def _reshuffle_as_necessary(self):
         while self._index >= len(self._source_items):
-            # Our new index is out of range, so we need to reshuffle.
+            # The new index is out of range, so we need to reshuffle.
             # Since len(self._source_items) can be smaller than self._num_instances,
             # we might have to reshuffle multiple times to "skip through" permutations of self._source_items.
             # Even though there might be intermediate permutations that are not actually used,
