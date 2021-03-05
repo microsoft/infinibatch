@@ -398,56 +398,48 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
         """
         if not source_items:
             raise ValueError("source must not be empty")
+        if instance_rank >= num_instances:
+            raise ValueError("invalid instance_rank")
         self._source_items = source_items
         self._shuffle = shuffle
         self._seed = seed
-        if instance_rank >= num_instances:
-            raise ValueError("invalid instance_rank")
         self._num_instances = num_instances
         self._instance_rank = instance_rank
         self.setstate(None)
 
     def getstate(self) -> Dict:
-        return {'random_state':      self._random_state,  # state of random generator before generating the current shuffling of the sequence
-                'num_items_yielded': self._num_items_yielded}    # how many items have already been iterated over in the current shuffling
+        return {'random_state': self._random_state, 'index': self._index}
 
     def setstate(self, checkpoint: Optional[Dict]):
-        # set iteration state. Do this outside the generator below in case getstate() is called before ever iterating
-        self._random_state      = checkpoint['random_state']      if checkpoint else None
-        self._num_items_yielded = checkpoint['num_items_yielded'] if checkpoint else 0
-        # We define the iteration itself as a generator for ease of implementation.
-        # We could as well just have used an explicit state machine represented by class members.
-        def _generate() -> Iterator:
-            # create and reset random generator
-            random = Random(self._seed)
-            if self._random_state is not None:  # restore the random generator's state
-                random.setstate(self._random_state)
-            skip_to_checkpoint = self._num_items_yielded  # items to skip in order to advance to checkpoint
-            # main outer loop for infinite passes over items (reshuffle before each pass)
-            while True:
-                # (re-)shuffle all items
-                self._random_state = random.getstate()  # remember random state before shuffling
-                self._num_items_yielded   = 0
-                shuffled_items = self._source_items[:]  # note: if underlying iterator is checkpointable, use setstate(checkpoint['nested_state']) on it
-                if self._shuffle:
-                    random.shuffle(shuffled_items)
-                shuffled_iterator = iter(shuffled_items)
-                # skip initial items when restarting from checkpoint
-                if skip_to_checkpoint:  # @TODO: find a way to abstract this more, so that we can plug it into the 'for' statement directly
-                    self._num_items_yielded += _advance_iterator(shuffled_iterator, skip_to_checkpoint)
-                    skip_to_checkpoint = 0  # done skipping
-                # main inner loop over items
-                for item in shuffled_iterator:
-                    self._num_items_yielded += 1  # record how many items we have iterated over in this pass over the items
-                    if (self._num_items_yielded-1) % self._num_instances == self._instance_rank:  # build-in islice facility
-                        yield item
-        self._iterator = _generate()
+        self._random_state = checkpoint['random_state'] if checkpoint else None
+        self._index        = checkpoint['index']        if checkpoint else self._instance_rank % len(self._source_items)
+
+        self._random = Random(self._seed)
+        if self._random_state is not None:
+            self._random.setstate(self._random_state)
+        
+        if self._shuffle:
+            self._reshuffle()
 
     def __next__(self):
-        return next(self._iterator)
+        assert(0 <= self._index and self._index < len(self._source_items))
+        if self._shuffle:
+            result = self._shuffled_items[self._index]
+        else:
+            result = self._source_items[self._index]
+        if self._shuffle and self._index + self._num_instances >= len(self._source_items):
+            # we made a complete pass through the source items, reschuffle
+            self._reshuffle()
+        self._index = (self._index + self._num_instances) % len(self._source_items)
+        return result
 
     def close(self):
         pass
+
+    def _reshuffle(self):
+        self._random_state = self._random.getstate()
+        self._shuffled_items = self._source_items[:]
+        self._random.shuffle(self._shuffled_items)
 
 
 class MultiplexIterator(CheckpointableIterator):
