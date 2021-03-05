@@ -1,5 +1,6 @@
 import copy
 import itertools
+import multiprocessing
 from random import Random
 import unittest
 
@@ -403,6 +404,29 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
         f = lambda: PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=0, buffer_in_main_process=True)
         self.assertRaises(ValueError, f)
 
+    def test_closing(self):
+        if multiprocessing.get_start_method() != 'fork':
+            return # dummy iterator used, skip test
+        it = PrefetchIterator(NativeCheckpointableIterator([0]), buffer_size=42, buffer_in_main_process=True)
+        it.close()
+        f = lambda: it.__next__()
+        self.assertRaises(RuntimeError, f)
+        f = lambda: it.setstate(None)
+        self.assertRaises(RuntimeError, f)
+
+    def test_nested(self):
+        for n in self.lengths:
+            for buffer_size in self.lengths:
+                for depth in [2, 3, 4, 5]:
+                    with self.subTest("n={}, buffer_size={}, depth={}".format(n, buffer_size, depth)):
+                        data = [torch.Tensor([float(i)]) for i in range(n)]
+                        it = NativeCheckpointableIterator(copy.deepcopy(data))
+                        for _ in range(depth):
+                            it = PrefetchIterator(it, buffer_size, buffer_in_main_process=True)
+                        result = list(it)
+                        self.assertEqual(result, data)
+                        it.close()
+
     def test_torch_tensors(self):
         for n in self.lengths:
             for buffer_size in self.lengths:
@@ -413,6 +437,12 @@ class TestPrefetchIteratorExperimental(TestBase, TestFiniteIteratorMixin, TestFi
                     )
                     result = list(it)
                     self.assertEqual(result, data)
+                    it.close()
+
+    def tearDown(self):
+        if hasattr(self, "test_cases"):
+            for _, _, it in self.test_cases:
+                it.close()
 
 
 class TestMultiplexIterator(TestBase, TestFiniteIteratorMixin, TestFiniteIteratorCheckpointingMixin):
