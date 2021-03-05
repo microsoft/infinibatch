@@ -55,6 +55,7 @@ class TestFiniteIteratorCheckpointingMixin:
                 result = list(it)
                 self.assertEqual(result, expected_result)
 
+    # TODO: Can this be rewritten in terms of _test_checkpointing_from_pos?
     def test_checkpointing_from_start(self):
         for case_name, _, it in self.test_cases:
             with self.subTest(case_name):
@@ -174,7 +175,6 @@ class TestInfinitePermutationSourceIterator(TestBase):
         super().setUp()
         self.repeats = [1, 2, 3]
 
-    # TODO: Add more checkpointing tests from above
     def test_no_shuffle(self):
         for n, k, num_instances in itertools.product(self.lengths, self.repeats, self.world_sizes):
             data = list(range(n))
@@ -226,9 +226,10 @@ class TestInfinitePermutationSourceIterator(TestBase):
         for n, k in itertools.product(self.lengths, self.repeats):
             with self.subTest(f"n={n}, k={k}"):
                 data = list(range(n))
+                expected_result = data * k
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data), shuffle=False)
                 result = [next(it) for _ in range(k * n)]
-                self.assertEqual(data * k, result)
+                self.assertEqual(result, expected_result)
 
     def test_single_instance_shuffle(self):
         # this test is technically included in test_shuffle
@@ -236,11 +237,12 @@ class TestInfinitePermutationSourceIterator(TestBase):
         for n, k in itertools.product(self.lengths, self.repeats):
             with self.subTest(f"n={n}, k={k}"):
                 data = list(range(n))
+                expected_result = data * k
                 it = InfinitePermutationSourceIterator(copy.deepcopy(data), seed=self.seed, shuffle=True)
                 result = [next(it) for _ in range(k * n)]
-                self.assertMultisetEqual(data * k, result)
+                self.assertMultisetEqual(result, expected_result)
 
-    def test_checkpointing_from_start_no_shuffle(self):
+    def test_checkpointing_reset_no_shuffle(self):
         for n, k, num_instances in itertools.product(self.lengths, self.repeats, self.world_sizes):
             data = list(range(n))
             for instance_rank in range(num_instances):
@@ -253,7 +255,7 @@ class TestInfinitePermutationSourceIterator(TestBase):
                     result = [next(it) for _ in range(k * n)]
                     self.assertEqual(result, expected_result)
 
-    def test_checkpointing_from_start_shuffle(self):
+    def test_checkpointing_reset_shuffle(self):
         for n, k, num_instances in itertools.product(self.lengths, self.repeats, self.world_sizes):
             data = list(range(n))
             for instance_rank in range(num_instances):
@@ -263,6 +265,34 @@ class TestInfinitePermutationSourceIterator(TestBase):
                     )
                     expected_result = [next(it) for _ in range(k * n)]  # extract data
                     it.setstate(None)  # reset to start
+                    result = [next(it) for _ in range(k * n)]
+                    self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_start_no_shuffle(self):
+        for n, k, num_instances in itertools.product(self.lengths, self.repeats, self.world_sizes):
+            data = list(range(n))
+            for instance_rank in range(num_instances):
+                with self.subTest(f"n={n}, k={k}, num_instances={num_instances}, instance_rank={instance_rank}"):
+                    it = InfinitePermutationSourceIterator(
+                        copy.deepcopy(data), shuffle=False, num_instances=num_instances, instance_rank=instance_rank
+                    )
+                    checkpoint = it.getstate()
+                    expected_result = [next(it) for _ in range(k * n)]  # extract data
+                    it.setstate(checkpoint)  # reset to start
+                    result = [next(it) for _ in range(k * n)]
+                    self.assertEqual(result, expected_result)
+
+    def test_checkpointing_from_start_shuffle(self):
+        for n, k, num_instances in itertools.product(self.lengths, self.repeats, self.world_sizes):
+            data = list(range(n))
+            for instance_rank in range(num_instances):
+                with self.subTest(f"n={n}, k={k}, num_instances={num_instances}, instance_rank={instance_rank}"):
+                    it = InfinitePermutationSourceIterator(
+                        copy.deepcopy(data), seed=self.seed, shuffle=True, num_instances=num_instances, instance_rank=instance_rank
+                    )
+                    checkpoint = it.getstate()
+                    expected_result = [next(it) for _ in range(k * n)]  # extract data
+                    it.setstate(checkpoint)  # reset to start
                     result = [next(it) for _ in range(k * n)]
                     self.assertEqual(result, expected_result)
 

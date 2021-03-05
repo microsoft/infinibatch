@@ -412,7 +412,7 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
 
     def setstate(self, checkpoint: Optional[Dict]):
         self._random_state = checkpoint['random_state'] if checkpoint else None
-        self._index        = checkpoint['index']        if checkpoint else self._instance_rank % len(self._source_items)
+        self._index        = checkpoint['index']        if checkpoint else self._instance_rank
 
         self._random = Random(self._seed)
         if self._random_state is not None:
@@ -420,17 +420,33 @@ class InfinitePermutationSourceIterator(CheckpointableIterator):
         
         if self._shuffle:
             self._reshuffle()
+            while self._index >= len(self._source_items):
+                # Our new index is out of range, so we need to reshuffle.
+                # Since len(self._source_items) might be smaller than self._num_instances,
+                # we might have to reshuffle multiple times to "skip through" permutations of self._source_items.
+                self._reshuffle()
+                self._index -= len(self._source_items)
+            assert(0 <= self._index and self._index < len(self._source_items))
+        else:
+            self._index = self._index % len(self._source_items)
 
     def __next__(self):
         assert(0 <= self._index and self._index < len(self._source_items))
         if self._shuffle:
             result = self._shuffled_items[self._index]
+            self._index += self._num_instances
+            while self._index >= len(self._source_items):
+                # Our new index is out of range, so we need to reshuffle.
+                # Since len(self._source_items) might be smaller than self._num_instances,
+                # we might have to reshuffle multiple times to "skip through" permutations of self._source_items.
+                self._reshuffle()
+                self._index -= len(self._source_items)
+            assert(0 <= self._index and self._index < len(self._source_items))
         else:
             result = self._source_items[self._index]
-        if self._shuffle and self._index + self._num_instances >= len(self._source_items):
-            # we made a complete pass through the source items, reschuffle
-            self._reshuffle()
-        self._index = (self._index + self._num_instances) % len(self._source_items)
+            # Since we do not have to shuffle, we can "skip through" multiple repititions of self._source_items
+            # with a simple modulo calculation.
+            self._index = (self._index + self._num_instances) % len(self._source_items)
         return result
 
     def close(self):
