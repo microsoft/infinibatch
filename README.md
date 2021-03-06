@@ -312,6 +312,10 @@ To run unit tests, run the following command.
 ```
 python -m unittest discover -s test
 ```
+If you would like the unit tests to stop after the first failed test, use:
+```
+python -m unittest discover -s test --failfast
+```
 To type-check with `mypy` (if installed):
 ```
 mypy infinibatch
