@@ -1390,13 +1390,14 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
     This is based on Marian NMT's BatchGenerator.
     """
 
-    def __init__(self, source_iterator: CheckpointableIterator, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], shuffle: bool=True, seed: int=0):
+    def __init__(self, source_iterator: CheckpointableIterator, read_ahead: int, key: Callable[[Any], Any], batch_size: Union[int,Callable[[Any], int]], boundary_key: Callable[[Any], Any]=None, shuffle: bool=True, seed: int=0):
         """
         Args:
             source_iterator: The data set that is read from. Typically this is an infinite source.
             read_ahead: Number of items to fetch ahead for grouping purposes.
             key: User-provided callback to define how data is sorted for purpose of batching.
             batch_size: Batch size in number of items. Either an integer or a callback to determine batch size for a given first batch item.
+            boundary_key: This optional callback, which maps an item to a key, allows to impose an additional restriction on the way batches are formed. Specifically, the iterator starts a new batch whenever the key changes. Thereby, it guarantees that all items in a batch have the same key. Keys are not allowed to be None.
             shuffle: Pass False to not randomize the batches. (default: True)
             seed: Random seed for batch shuffling.
         """
@@ -1405,6 +1406,7 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
         # keep arguments
         self._key = key                # type: Callable[[Any], Any]
         self._batch_size = batch_size  # type: Union[int,Callable[[Any], int]]
+        self._boundary_key = boundary_key  # type: Callable[[Any], Any]
         self._read_ahead = read_ahead  # type: int
         # initialize state
         self._seed = seed
@@ -1461,16 +1463,26 @@ class BucketedReadaheadBatchIterator(CheckpointableIterator):
                 items.sort(key=self._key, reverse=True)  # note: sort() is stable, so we won't undo any randomization besides the bucketing
             # group into batches
             cur_batch = None  # type: Optional[List[Any]]
+            prev_val = None
             batches = []      # type: List[Any]
             for item in items:
+                if self._boundary_key and self._boundary_key(item) != prev_val:
+                    if cur_batch:
+                        batches.append(cur_batch)
+                    cur_batch = None
+                    prev_val = None
                 if not cur_batch:
                     batch_size = self._batch_size if isinstance(self._batch_size, int) else \
                                  self._batch_size(item)
                     cur_batch = []
                 cur_batch.append(item)
+                if self._boundary_key:
+                   prev_val = self._boundary_key(item)
+                   assert prev_val is not None
                 if len(cur_batch) >= batch_size:  # this batch is full
                     batches.append(cur_batch)
                     cur_batch = None
+                    prev_val = None
             if cur_batch:
                 batches.append(cur_batch)
             return batches
