@@ -755,6 +755,10 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
         return TestBucketedReadaheadBatchIterator.dynamic_batch_size // len(item)
 
     @staticmethod
+    def boundary_key_fn(item):
+        return len(item) < 5
+
+    @staticmethod
     def setup_data(n):
         data = []
         for i in range(n):
@@ -766,7 +770,7 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
         self.batch_sizes = [1, 2, 3, 9]
         self.test_cases = []
 
-        # fixed batch size, not shuffled
+        # fixed batch size, not shuffled, no boundary key
         for n, read_ahead in itertools.product(self.lengths, self.lengths):
             for batch_size in self.batch_sizes:
                 data = self.setup_data(n)
@@ -778,10 +782,16 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                     shuffle=False,
                 )
                 self.test_cases.append(
-                    ("n={}, read_ahead={}, batch_size={}, shuffled=False".format(n, read_ahead, batch_size), data, it)
+                    (
+                        "n={}, read_ahead={}, batch_size={}, boundary_key=None, shuffled=False".format(
+                            n, read_ahead, batch_size
+                        ),
+                        data,
+                        it,
+                    )
                 )
 
-        # fixed batch size, shuffled
+        # fixed batch size, shuffled, no boundary key
         for n, read_ahead in itertools.product(self.lengths, self.lengths):
             for batch_size in self.batch_sizes:
                 data = self.setup_data(n)
@@ -794,10 +804,16 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                     seed=self.seed,
                 )
                 self.test_cases.append(
-                    ("n={}, read_ahead={}, batch_size={}, shuffled=True".format(n, read_ahead, batch_size), data, it)
+                    (
+                        "n={}, read_ahead={}, batch_size={}, boundary_key=None, shuffled=True".format(
+                            n, read_ahead, batch_size
+                        ),
+                        data,
+                        it,
+                    )
                 )
 
-        # dynamic batch size, not shuffled
+        # dynamic batch size, not shuffled, no boundary key
         for n, read_ahead in itertools.product(self.lengths, self.lengths):
             data = self.setup_data(n)
             it = BucketedReadaheadBatchIterator(
@@ -808,10 +824,14 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                 shuffle=False,
             )
             self.test_cases.append(
-                ("n={}, read_ahead={}, batch_size=dynamic, shuffled=False".format(n, read_ahead), data, it)
+                (
+                    "n={}, read_ahead={}, batch_size=dynamic, boundary_key=None, shuffled=False".format(n, read_ahead),
+                    data,
+                    it,
+                )
             )
 
-        # dynamic batch size, shuffled
+        # dynamic batch size, shuffled, no boundary key
         for n, read_ahead in itertools.product(self.lengths, self.lengths):
             data = self.setup_data(n)
             it = BucketedReadaheadBatchIterator(
@@ -823,7 +843,100 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                 seed=self.seed,
             )
             self.test_cases.append(
-                ("n={}, read_ahead={}, batch_size=dynamic, shuffled=True".format(n, read_ahead), data, it)
+                (
+                    "n={}, read_ahead={}, batch_size=dynamic, boundary_key=None, shuffled=True".format(n, read_ahead),
+                    data,
+                    it,
+                )
+            )
+
+        # fixed batch size, not shuffled, boundary key
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            for batch_size in self.batch_sizes:
+                data = self.setup_data(n)
+                it = BucketedReadaheadBatchIterator(
+                    NativeCheckpointableIterator(copy.deepcopy(data)),
+                    read_ahead=read_ahead,
+                    key=self.key_fn,
+                    batch_size=batch_size,
+                    boundary_key=self.boundary_key_fn,
+                    shuffle=False,
+                )
+                self.test_cases.append(
+                    (
+                        "n={}, read_ahead={}, batch_size={}, boundary_key=len(item)<5, shuffled=False".format(
+                            n, read_ahead, batch_size
+                        ),
+                        data,
+                        it,
+                    )
+                )
+
+        # fixed batch size, shuffled, boundary key
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            for batch_size in self.batch_sizes:
+                data = self.setup_data(n)
+                it = BucketedReadaheadBatchIterator(
+                    NativeCheckpointableIterator(copy.deepcopy(data)),
+                    read_ahead=read_ahead,
+                    key=self.key_fn,
+                    batch_size=batch_size,
+                    boundary_key=self.boundary_key_fn,
+                    shuffle=True,
+                    seed=self.seed,
+                )
+                self.test_cases.append(
+                    (
+                        "n={}, read_ahead={}, batch_size={}, boundary_key=len(item)<5, shuffled=True".format(
+                            n, read_ahead, batch_size
+                        ),
+                        data,
+                        it,
+                    )
+                )
+
+        # dynamic batch size, not shuffled, boundary key
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            data = self.setup_data(n)
+            it = BucketedReadaheadBatchIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)),
+                read_ahead=read_ahead,
+                key=self.key_fn,
+                batch_size=self.batch_size_fn,
+                boundary_key=self.boundary_key_fn,
+                shuffle=False,
+                seed=self.seed,
+            )
+            self.test_cases.append(
+                (
+                    "n={}, read_ahead={}, batch_size=dynamic, boundary_key=len(item)<5, shuffled=False".format(
+                        n, read_ahead
+                    ),
+                    data,
+                    it,
+                )
+            )
+
+        # dynamic batch size, shuffled, boundary key
+        for n, read_ahead in itertools.product(self.lengths, self.lengths):
+            data = self.setup_data(n)
+            it = BucketedReadaheadBatchIterator(
+                NativeCheckpointableIterator(copy.deepcopy(data)),
+                read_ahead=read_ahead,
+                key=self.key_fn,
+                batch_size=self.batch_size_fn,
+                boundary_key=self.boundary_key_fn,
+                shuffle=True,
+                seed=self.seed,
+            )
+            self.test_cases.append(
+                (
+                    "n={}, read_ahead={}, batch_size=dynamic, boundary_key=len(item)<5, shuffled=True".format(
+                        n, read_ahead
+                    ),
+                    data,
+                    it,
+                )
             )
 
     def test_basic(self):
@@ -841,3 +954,12 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                     for batch in result:
                         length = sum((len(item) for item in batch))
                         self.assertTrue(length <= TestBucketedReadaheadBatchIterator.dynamic_batch_size)
+
+    def test_boundary_key(self):
+        for case_name, expected_result, it in self.test_cases:
+            if "boundary_key=len(item)<5" in case_name:
+                with self.subTest(case_name):
+                    result = list(it)
+                    for batch in result:
+                        boundary_keys = [self.boundary_key_fn(item) for item in batch]
+                        self.assertTrue(all(boundary_keys) or not any(boundary_keys))
