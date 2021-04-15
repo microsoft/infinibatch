@@ -961,5 +961,5 @@ class TestBucketedReadaheadBatchIterator(TestBase, TestFiniteIteratorCheckpointi
                 with self.subTest(case_name):
                     result = list(it)
                     for batch in result:
-                        boundary_keys = (self.boundary_key_fn(item) for item in batch)
+                        boundary_keys = [self.boundary_key_fn(item) for item in batch]
                         self.assertTrue(all(boundary_keys) or not any(boundary_keys))
