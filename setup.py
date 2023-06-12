@@ -23,7 +23,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     platforms=['any'],
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     keywords=['datasets', 'NLP', 'natural language processing,' 'computational linguistics'],
     download_url='https://github.com/microsoft/infinibatch',
 )

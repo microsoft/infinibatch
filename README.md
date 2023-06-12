@@ -1,4 +1,4 @@
-# InfiniBatch
+# InfiniBatch [![image](http://img.shields.io/pypi/v/infinibatch.svg)](https://pypi.python.org/pypi/infinibatch/)
 
 Infinibatch is a library of checkpointable iterators for randomized data loading of massive data sets in deep neural network training.
 
@@ -20,9 +20,14 @@ Infinibatch is a library of checkpointable iterators for randomized data loading
 ## Getting Started
 
 Infinibatch requires Python 3.6 or higher and has no dependencies.
-There is presently no pip package.
 
-To install it, clone this repository and install it locally.
+__Install from PyPI:__
+```
+pip install infinibatch
+```
+
+
+Alternatively, clone this repository and install it locally.
 
 ```bash
 git clone https://github.com/microsoft/infinibatch
